@@ -1,0 +1,21 @@
+[project]
+name = "video-generate-agent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "dotenv>=0.9.9",
+    "edge-tts>=7.0.2",
+    "google-genai>=1.19.0",
+    "httpx[socks]>=0.28.1",
+    "moviepy>=2.2.1",
+    "pillow>=11.2.1",
+    "pydantic-ai[logfire]>=0.2.16",
+    "pydub>=0.25.1",
+    "requests>=2.32.4",
+]
+
+[[tool.uv.index]]
+url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
+default = true
