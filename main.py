@@ -40,10 +40,12 @@ async def main():
     # 配置生成参数
     start_chapter = 1  # 开始章节
     end_chapter = 1    # 结束章节（可以设置为3来生成所有章节）
+    scene_count = 20    # 每章节场景数量（范围：5-50）
     
     print("🎯 生成设置:")
     print(f"   开始章节: 第{start_chapter}章")
     print(f"   结束章节: 第{end_chapter}章")
+    print(f"   每章场景数: {scene_count}个")
     print("=" * 50)
     
     # 启动AI视频生成
@@ -51,6 +53,7 @@ async def main():
         outline=sample_outline,
         start_chapter=start_chapter,
         end_chapter=end_chapter,
+        scene_count=scene_count,
         requirement="情节跌宕起伏，要体现出复仇的爽感，要有甜宠剧的风格和逆袭剧的风格，这个剧情的受众群体是女性，请结合这些要素进行生成。"
     )
     

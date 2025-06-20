@@ -6,8 +6,6 @@ from utils.mcp import filesystem_mcp
 from utils.video import generate_video
 from .novel_agent import novel_agent, NovelAgentDeps
 from .scene_agent import scene_agent, SceneAgentDeps
-from .image_agent import image_agent, ImageAgentDeps
-from .audio_agent import audio_agent, AudioAgentDeps
 import asyncio
 import os
 
@@ -18,6 +16,7 @@ class MainAgentDeps:
     start_chapter: int = 1
     end_chapter: int = 1
     total_chapters: Optional[int] = None
+    scene_count: int = 5  # 每章节的场景数量，默认5个，范围5-50
 
 
 main_agent = Agent(
@@ -42,14 +41,12 @@ def orchestrate_video_generation(ctx: RunContext[MainAgentDeps]) -> str:
     你需要按照以下步骤为每个章节生成完整的AI视频：
 
     1. **文本生成阶段**: 调用 generate_chapter_content 工具生成章节文本内容
-    2. **分镜脚本阶段**: 调用 generate_scene_scripts 工具将文本转换为分镜头脚本
-    3. **图片生成阶段**: 调用 generate_chapter_images 工具根据分镜脚本生成图片
-    4. **音频生成阶段**: 调用 generate_chapter_audio 工具生成音频和字幕
-    5. **视频合成阶段**: 调用 compose_final_video 工具将所有素材合成最终视频
+    2. **完整媒体生成阶段**: 调用 generate_scene_scripts 工具生成分镜脚本、图片和音频（一站式完成）
+    3. **视频合成阶段**: 调用 compose_final_video 工具将所有素材合成最终视频
 
     **工作流程**:
     - 从第{start_chapter}章开始，到第{end_chapter}章结束
-    - 每个章节必须严格按照上述5个步骤顺序执行
+    - 每个章节必须严格按照上述3个步骤顺序执行
     - 确保前一步完成后再执行下一步
     - 在每个步骤完成后，报告当前进度
 
@@ -59,6 +56,7 @@ def orchestrate_video_generation(ctx: RunContext[MainAgentDeps]) -> str:
     - 每个步骤都需要等待前一步完全完成
     - 如果某个步骤失败，需要重试或报告错误
     - 最终生成的视频文件保存在 output/chapters/chapter_X/generated_video.mp4
+    - 步骤2（generate_scene_scripts）现在会一次性完成分镜脚本、图片和音频的生成
 
     请开始执行视频生成流程。
     """
@@ -93,62 +91,24 @@ async def generate_chapter_content(ctx: RunContext[MainAgentDeps], chapter_num: 
 @main_agent.tool
 async def generate_scene_scripts(ctx: RunContext[MainAgentDeps], chapter_num: int) -> str:
     """
-    生成指定章节的分镜头脚本
+    生成指定章节的分镜头脚本、图片和音频（完整流程）
     """
     try:
-        print(f"🎬 开始生成第{chapter_num}章分镜头脚本...")
+        print(f"🎬 开始生成第{chapter_num}章的完整媒体内容...")
         
-        # 调用scene_agent生成分镜脚本
-        deps = SceneAgentDeps(outline=ctx.deps.outline, current_chapter=chapter_num)
-        result = await scene_agent.run("请根据章节内容生成分镜头脚本", deps=deps)
+        # 调用scene_agent生成完整的媒体内容（分镜脚本+图片+音频）
+        deps = SceneAgentDeps(
+            outline=ctx.deps.outline, 
+            current_chapter=chapter_num,
+            scene_count=ctx.deps.scene_count
+        )
+        result = await scene_agent.run("请生成完整的媒体内容，包括分镜脚本、图片和音频", deps=deps)
         
-        print(f"✅ 第{chapter_num}章分镜头脚本生成完成")
-        return f"第{chapter_num}章分镜头脚本已生成: {result.data}"
-        
-    except Exception as e:
-        error_msg = f"❌ 第{chapter_num}章分镜脚本生成失败: {str(e)}"
-        print(error_msg)
-        return error_msg
-
-
-@main_agent.tool
-async def generate_chapter_images(ctx: RunContext[MainAgentDeps], chapter_num: int) -> str:
-    """
-    生成指定章节的图片
-    """
-    try:
-        print(f"🖼️ 开始生成第{chapter_num}章图片...")
-        
-        # 调用image_agent生成图片
-        deps = ImageAgentDeps(current_chapter=chapter_num)
-        result = await image_agent.run("请根据分镜脚本生成图片", deps=deps)
-        
-        print(f"✅ 第{chapter_num}章图片生成完成")
-        return f"第{chapter_num}章图片已生成: {result.data}"
+        print(f"✅ 第{chapter_num}章完整媒体内容生成完成")
+        return f"第{chapter_num}章完整媒体内容已生成: {result.data}"
         
     except Exception as e:
-        error_msg = f"❌ 第{chapter_num}章图片生成失败: {str(e)}"
-        print(error_msg)
-        return error_msg
-
-
-@main_agent.tool
-async def generate_chapter_audio(ctx: RunContext[MainAgentDeps], chapter_num: int) -> str:
-    """
-    生成指定章节的音频和字幕
-    """
-    try:
-        print(f"🔊 开始生成第{chapter_num}章音频和字幕...")
-        
-        # 调用audio_agent生成音频
-        deps = AudioAgentDeps(current_chapter=chapter_num)
-        result = await audio_agent.run("请根据脚本生成音频和字幕", deps=deps)
-        
-        print(f"✅ 第{chapter_num}章音频和字幕生成完成")
-        return f"第{chapter_num}章音频和字幕已生成: {result.data}"
-        
-    except Exception as e:
-        error_msg = f"❌ 第{chapter_num}章音频生成失败: {str(e)}"
+        error_msg = f"❌ 第{chapter_num}章媒体内容生成失败: {str(e)}"
         print(error_msg)
         return error_msg
 
@@ -201,7 +161,7 @@ def get_generation_progress(ctx: RunContext[MainAgentDeps]) -> str:
 
 
 # 便捷的启动函数
-async def start_video_generation(outline: str, start_chapter: int = 1, end_chapter: int = 1, requirement: str = '') -> str:
+async def start_video_generation(outline: str, start_chapter: int = 1, end_chapter: int = 1, requirement: str = '', scene_count: int = 5) -> str:
     """
     启动AI视频生成流程的便捷函数
     
@@ -209,18 +169,22 @@ async def start_video_generation(outline: str, start_chapter: int = 1, end_chapt
         outline: 小说大纲
         start_chapter: 开始章节号
         end_chapter: 结束章节号
+        requirement: 用户需求描述
+        scene_count: 每章节的场景数量，范围5-50，默认5
     
     Returns:
         生成结果描述
     """
     print("🎯 开始AI视频生成任务")
     print(f"📖 章节范围: 第{start_chapter}章 - 第{end_chapter}章")
+    print(f"🎬 每章场景数量: {scene_count}个")
     print(f"📝 大纲: {outline[:100]}...")
     
     deps = MainAgentDeps(
         outline=outline,
         start_chapter=start_chapter,
-        end_chapter=end_chapter
+        end_chapter=end_chapter,
+        scene_count=scene_count
     )
     
     try:
