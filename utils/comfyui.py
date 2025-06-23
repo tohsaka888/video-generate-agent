@@ -82,6 +82,8 @@ def generate_image(prompt_text="", negative_prompt=None, save_path: str = '.'):
             image = Image.open(io.BytesIO(image_data))
             image.save(save_path)
 
+    return true
+
 
 if __name__ == '__main__':
     generate_image(prompt_text="embedding:lazypos, agirl, long hair, white hair, cute, happy", negative_prompt=None, save_path="output_images/test.png")
