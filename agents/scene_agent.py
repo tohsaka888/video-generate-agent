@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pydantic_ai import Agent, RunContext
 from utils.llm import chat_model
 from utils.mcp import filesystem_mcp
-from utils.generate_img import generate_image
+from utils.comfyui import generate_image
 import edge_tts
 
 
@@ -228,6 +228,7 @@ def generate_complete_media_content(ctx: RunContext[SceneAgentDeps]) -> str:
       2. 场景：人物所处场景的关键词描述。
       3. 镜头：角色的动作、互动，描述图片中的构图和人物关系（不包含对话）。
     - 每个stable diffusion的prompt至少100字，必须使用英文，必须包含embedding:lazypos。
+    - 生成的多个prompt需要确保一致性，尤其是人物，对于相同的人物，除了神态、动作之外，其他细节（如服饰、身材、发型、发色等）需保持一致。
     - 生成内容后，调用工具将每个镜头的提示词分别保存至 output/chapters/chapter_{current_chapter}/scenes/scene_i.txt（i为镜头编号）。
     - 还需要生成每个镜头对应的脚本文件，脚本文件是指这个镜头对应的原文内容，调用工具保存至 output/chapters/chapter_{current_chapter}/scripts/script_i.txt（i为镜头编号）。
 
@@ -292,7 +293,7 @@ def batch_generate_images(ctx: RunContext[SceneAgentDeps]) -> str:
             print(f"🎨 正在生成第{i}/{len(scene_files)}张图片...")
             
             # 调用图片生成
-            result = generate_image(prompt=scene_content, save_path=image_path)
+            result = generate_image(prompt_text=scene_content, save_path=image_path)
             
             if result and os.path.exists(image_path):
                 generated_images.append(f"scene_{i}.png")

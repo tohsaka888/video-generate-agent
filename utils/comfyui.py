@@ -9,8 +9,12 @@ import urllib.parse
 from PIL import Image
 import io
 import os
+import dotenv
+import requests
 
-server_address = "127.0.0.1:8188"
+dotenv.load_dotenv('.env')
+
+server_address = os.getenv('COMFYUI_BASE_URL')
 client_id = str(uuid.uuid4())
 
 def queue_prompt(prompt):
@@ -52,27 +56,32 @@ def get_images(ws, prompt):
 
     return output_images
 
-if __name__ == '__main__':
-    with open('assets/workflow/config.json', 'r', encoding='utf-8') as f:
-        prompt_text = f.read()
+def generate_image(prompt_text="", negative_prompt=None, save_path: str = '.'):
+    dir_name = os.path.dirname(save_path)
+    if dir_name:
+        os.makedirs(dir_name, exist_ok=True)
+    
+    if not prompt_text:
+        raise ValueError("Prompt must not be empty.")
 
-    prompt = json.loads(prompt_text)
+    with open('assets/workflow/config.json', 'r', encoding='utf-8') as f:
+        workflow_json = f.read()
+
+    workflow = json.loads(workflow_json)
     #set the text prompt for our positive CLIPTextEncode
-    prompt["6"]["inputs"]["text"] = "embedding:lazypos, agirl, solo, white hair, long hair, school uniform, school, beautiful, red eyes, stockings, sit on the chair, sad"
+    workflow["6"]["inputs"]["text"] = prompt_text
 
     ws = websocket.WebSocket()
     ws.connect("ws://{}/ws?clientId={}".format(server_address, client_id))
-    images = get_images(ws, prompt)
+    images = get_images(ws, workflow)
     ws.close() # for in case this example is used in an environment where it will be repeatedly called, like in a Gradio app. otherwise, you'll randomly receive connection timeouts
     # Commented out code to display the output images:
-
-    output_dir = "output_images"
-    os.makedirs(output_dir, exist_ok=True)
-
-    print("Saving images...")
 
     for node_id in images:
         for idx, image_data in enumerate(images[node_id]):
             image = Image.open(io.BytesIO(image_data))
-            image.save(os.path.join(output_dir, f"{node_id}_{idx}.png"))
-            print(f"Saved {node_id}_{idx}.png")
+            image.save(save_path)
+
+
+if __name__ == '__main__':
+    generate_image(prompt_text="embedding:lazypos, agirl, long hair, white hair, cute, happy", negative_prompt=None, save_path="output_images/test.png")

@@ -1,12 +1,25 @@
 import requests
 import dotenv
 import os
+from utils.comfyui import get_image, get_images, get_history
+#This is an example that uses the websockets api and the SaveImageWebsocket node to get images directly without
+#them being saved to disk
+
+import websocket #NOTE: websocket-client (https://github.com/websocket-client/websocket-client)
+import uuid
+import json
+import urllib.request
+import urllib.parse
+from PIL import Image
+import io
+import os
 
 dotenv.load_dotenv()
 
 IMAGE_MODEL = os.getenv("IMAGE_MODEL") or ''
 IMAGE_MODEL_KEY = os.getenv("IMAGE_MODEL_KEY") or ''
 API_URL = os.getenv("IMAGE_API_BASE") or ''
+server_address = os.getenv('COMFYUI_BASE_URL')
 
 def generate_image(prompt="", negative_prompt=None, save_path: str = '.'):
     dir_name = os.path.dirname(save_path)
