@@ -16,33 +16,20 @@ def generate_image(prompt="", negative_prompt=None, save_path: str = '.'):
     if not prompt:
         raise ValueError("Prompt must not be empty.")
 
-    payload = {
-        "model": IMAGE_MODEL,
-        "prompt": prompt,
-        "negative_prompt": negative_prompt
-        or "booty, boob, (nsfw), (painting by bad-artist-anime:0.9), (painting by bad-artist:0.9), watermark, text, error, blurry, jpeg artifacts, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, artist name, (worst quality, low quality:1.4), bad anatomy",
-        "image_size": "1152x2048",
-        "batch_size": 1,
-        "seed": 4999999999,
-        "num_inference_steps": 20,
-        "guidance_scale": 7.5,
-    }
-    headers = {
-        "Authorization": f"Bearer {IMAGE_MODEL_KEY}",
-        "Content-Type": "application/json"
-    }
+    with open('assets/workflow/config.json', 'r', encoding='utf-8') as f:
+        prompt_text = f.read()
 
-    response = requests.post(API_URL, json=payload, headers=headers)
-    response.raise_for_status()
-    data = response.json()
-    image_url = data["images"][0]["url"]
+    prompt = json.loads(prompt_text)
+    #set the text prompt for our positive CLIPTextEncode
+    prompt["6"]["inputs"]["text"] = prompt
 
-    img_response = requests.get(image_url)
-    if img_response.status_code == 200:
-        with open(save_path, "wb") as f:
-            f.write(img_response.content)
-        print(f"Image saved to {save_path}")
-        return save_path
-    else:
-        print("Failed to download image:", img_response.status_code)
-        return "Failed to download image"
+    ws = websocket.WebSocket()
+    ws.connect("ws://{}/ws?clientId={}".format(server_address, client_id))
+    images = get_images(ws, prompt)
+    ws.close() # for in case this example is used in an environment where it will be repeatedly called, like in a Gradio app. otherwise, you'll randomly receive connection timeouts
+    # Commented out code to display the output images:
+
+    for node_id in images:
+        for idx, image_data in enumerate(images[node_id]):
+            image = Image.open(io.BytesIO(image_data))
+            image.save(os.path.join(output_dir, save_path))

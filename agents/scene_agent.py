@@ -13,7 +13,7 @@ def validate_scene_count(scene_count: int) -> int:
     """
     验证并调整场景数量，确保在5-50范围内。
     
-    Args:
+    Args:·
         scene_count: 用户输入的场景数量
         
     Returns:
@@ -218,17 +218,16 @@ def generate_complete_media_content(ctx: RunContext[SceneAgentDeps]) -> str:
 
     你的工作流程包括三个阶段：
 
-    **阶段1：分镜脚本生成**
+    **阶段1：分镜stable diffusion prompt生成**
     根据 output/chapters/chapter_{current_chapter}/index.txt 文件中的章节内容，结合用户提供的大纲，为本章节创作分镜头脚本。
 
     要求如下：
     - 共生成{scene_count}个镜头，每个镜头需详细描述，突出画面感，便于生成动漫风格或写实风格的图片。
     - 每个镜头描述需包含：
       1. 人物：主要角色的外貌、服饰、神态、动作。
-      2. 场景：环境、氛围、光影等细节。
+      2. 场景：人物所处场景的关键词描述。
       3. 镜头：角色的动作、互动，描述图片中的构图和人物关系（不包含对话）。
-      4. 风格：明确为"动漫风"或"写实风"二选一。
-    - 每个镜头描述约100字，内容连贯有趣，符合大纲设定。
+    - 每个stable diffusion的prompt至少100字，必须使用英文，必须包含embedding:lazypos。
     - 生成内容后，调用工具将每个镜头的提示词分别保存至 output/chapters/chapter_{current_chapter}/scenes/scene_i.txt（i为镜头编号）。
     - 还需要生成每个镜头对应的脚本文件，脚本文件是指这个镜头对应的原文内容，调用工具保存至 output/chapters/chapter_{current_chapter}/scripts/script_i.txt（i为镜头编号）。
 
@@ -238,14 +237,9 @@ def generate_complete_media_content(ctx: RunContext[SceneAgentDeps]) -> str:
     **阶段3：音频生成**
     完成图片生成后，调用 batch_generate_audio 工具为所有脚本生成音频和字幕文件。
 
-    示例镜头描述：
+    示例sd prompt描述：
     ```md
-    人物：
-    1. 艾莉丝：年轻女巫，金色长发，穿蓝色长袍，手持魔法杖。
-    2. 凯尔：年轻骑士，短发，银色盔甲，手持剑，面带微笑。
-    场景：神秘森林，光影斑驳。
-    镜头：艾莉丝站在森林中央，魔杖挥舞，周围萦绕着光点；凯尔在一旁注视。
-    风格：动漫风
+    embedding:lazypos, agirl, solo, white hair, long hair, school uniform, school, beautiful, red eyes, stockings, sit on the chair, sad
     ```
 
     请按照上述三个阶段的顺序执行，确保每个阶段完成后再进行下一阶段。

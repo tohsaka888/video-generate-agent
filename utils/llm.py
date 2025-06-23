@@ -25,9 +25,6 @@ if CHAT_MODEL_KEY is None:
 provider = OpenAIProvider(
     base_url=CHAT_BASE_URL,  # API基础URL
     api_key=CHAT_MODEL_KEY,  # API密钥
-    http_client=httpx.AsyncClient(
-        proxy="http://genova:genova@127.0.0.1:7897"
-    ),  # 异步HTTP客户端
 )
 
 # 创建OpenAI模型实例

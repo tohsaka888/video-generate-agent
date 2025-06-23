@@ -1,0 +1,179 @@
+{
+    "3": {
+      "inputs": {
+        "seed": 643759397745416,
+        "steps": 25,
+        "cfg": 7,
+        "sampler_name": "euler",
+        "scheduler": "karras",
+        "denoise": 1,
+        "model": [
+          "23",
+          0
+        ],
+        "positive": [
+          "6",
+          0
+        ],
+        "negative": [
+          "7",
+          0
+        ],
+        "latent_image": [
+          "5",
+          0
+        ]
+      },
+      "class_type": "KSampler",
+      "_meta": {
+        "title": "K采样器"
+      }
+    },
+    "4": {
+      "inputs": {
+        "ckpt_name": "waiNSFWIllustrious_v140.safetensors"
+      },
+      "class_type": "CheckpointLoaderSimple",
+      "_meta": {
+        "title": "Checkpoint加载器（简易）"
+      }
+    },
+    "5": {
+      "inputs": {
+        "width": 768,
+        "height": 1536,
+        "batch_size": 1
+      },
+      "class_type": "EmptyLatentImage",
+      "_meta": {
+        "title": "空Latent图像"
+      }
+    },
+    "6": {
+      "inputs": {
+        "text": "embedding:lazypos, agrirl, solo, beautiful, school",
+        "clip": [
+          "23",
+          1
+        ]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": {
+        "title": "CLIP文本编码"
+      }
+    },
+    "7": {
+      "inputs": {
+        "text": "lazyneg,",
+        "clip": [
+          "4",
+          1
+        ]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": {
+        "title": "CLIP文本编码"
+      }
+    },
+    "8": {
+      "inputs": {
+        "samples": [
+          "3",
+          0
+        ],
+        "vae": [
+          "4",
+          2
+        ]
+      },
+      "class_type": "VAEDecode",
+      "_meta": {
+        "title": "VAE解码"
+      }
+    },
+    "9": {
+      "inputs": {
+        "filename_prefix": "ComfyUI",
+        "images": [
+          "21",
+          0
+        ]
+      },
+      "class_type": "SaveImage",
+      "_meta": {
+        "title": "保存图像"
+      }
+    },
+    "13": {
+      "inputs": {
+        "lora_name": "Dot_Comics-000018.safetensors",
+        "strength_model": 1,
+        "strength_clip": 1,
+        "model": [
+          "4",
+          0
+        ],
+        "clip": [
+          "4",
+          1
+        ]
+      },
+      "class_type": "LoraLoader",
+      "_meta": {
+        "title": "加载LoRA"
+      }
+    },
+    "20": {
+      "inputs": {
+        "model_name": "2x_AniSD_RealPLKSR_140K.pth"
+      },
+      "class_type": "UpscaleModelLoader",
+      "_meta": {
+        "title": "加载放大模型"
+      }
+    },
+    "21": {
+      "inputs": {
+        "upscale_model": [
+          "20",
+          0
+        ],
+        "image": [
+          "8",
+          0
+        ]
+      },
+      "class_type": "ImageUpscaleWithModel",
+      "_meta": {
+        "title": "使用模型放大图像"
+      }
+    },
+    "23": {
+      "inputs": {
+        "lora_name": "noobai_ep11_stabilizer_v0.205_fp16.safetensors",
+        "strength_model": 1,
+        "strength_clip": 1,
+        "model": [
+          "13",
+          0
+        ],
+        "clip": [
+          "13",
+          1
+        ]
+      },
+      "class_type": "LoraLoader",
+      "_meta": {
+        "title": "加载LoRA"
+      }
+    },
+    "save_image_websocket_node": {
+      "class_type": "SaveImageWebsocket",
+      "inputs": {
+          "images": [
+              "8",
+              0
+          ]
+      }
+  }
+}
