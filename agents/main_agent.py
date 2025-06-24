@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 from pydantic_ai import Agent, RunContext
 from utils.llm import chat_model
 from utils.mcp import filesystem_mcp
@@ -13,9 +12,7 @@ import os
 @dataclass
 class MainAgentDeps:
     outline: str
-    start_chapter: int = 1
-    end_chapter: int = 1
-    total_chapters: Optional[int] = None
+    chapter: int = 1  # 只支持单章节生成
     scene_count: int = 5  # 每章节的场景数量，默认5个，范围5-50
 
 
@@ -29,24 +26,23 @@ main_agent = Agent(
 @main_agent.instructions
 def orchestrate_video_generation(ctx: RunContext[MainAgentDeps]) -> str:
     """
-    主控制器，协调整个AI视频生成流程。
+    主控制器，协调整个AI视频生成流程（单章节）。
     """
     outline = ctx.deps.outline
-    start_chapter = ctx.deps.start_chapter
-    end_chapter = ctx.deps.end_chapter
+    chapter = ctx.deps.chapter
     
     system_instruction = f"""
     你是AI视频生成系统的主控制器，负责协调整个视频生成流程。
 
-    你需要按照以下步骤为每个章节生成完整的AI视频：
+    你需要按照以下步骤为第{chapter}章生成完整的AI视频：
 
     1. **文本生成阶段**: 调用 generate_chapter_content 工具生成章节文本内容
     2. **完整媒体生成阶段**: 调用 generate_scene_scripts 工具生成分镜脚本、图片和音频（一站式完成）
     3. **视频合成阶段**: 调用 compose_final_video 工具将所有素材合成最终视频
 
     **工作流程**:
-    - 从第{start_chapter}章开始，到第{end_chapter}章结束
-    - 每个章节必须严格按照上述3个步骤顺序执行
+    - 只生成第{chapter}章
+    - 每个步骤必须严格按照上述3个步骤顺序执行
     - 确保前一步完成后再执行下一步
     - 在每个步骤完成后，报告当前进度
 
@@ -55,7 +51,7 @@ def orchestrate_video_generation(ctx: RunContext[MainAgentDeps]) -> str:
     **注意事项**:
     - 每个步骤都需要等待前一步完全完成
     - 如果某个步骤失败，需要重试或报告错误
-    - 最终生成的视频文件保存在 output/chapters/chapter_X/generated_video.mp4
+    - 最终生成的视频文件保存在 output/chapters/chapter_{chapter}/generated_video.mp4
     - 步骤2（generate_scene_scripts）现在会一次性完成分镜脚本、图片和音频的生成
 
     请开始执行视频生成流程。
@@ -64,10 +60,11 @@ def orchestrate_video_generation(ctx: RunContext[MainAgentDeps]) -> str:
 
 
 @main_agent.tool
-async def generate_chapter_content(ctx: RunContext[MainAgentDeps], chapter_num: int) -> str:
+async def generate_chapter_content(ctx: RunContext[MainAgentDeps]) -> str:
     """
     生成指定章节的文本内容
     """
+    chapter_num = ctx.deps.chapter
     try:
         print(f"🚀 开始生成第{chapter_num}章文本内容...")
         
@@ -89,10 +86,11 @@ async def generate_chapter_content(ctx: RunContext[MainAgentDeps], chapter_num: 
 
 
 @main_agent.tool
-async def generate_scene_scripts(ctx: RunContext[MainAgentDeps], chapter_num: int) -> str:
+async def generate_scene_scripts(ctx: RunContext[MainAgentDeps]) -> str:
     """
     生成指定章节的分镜头脚本、图片和音频（完整流程）
     """
+    chapter_num = ctx.deps.chapter
     try:
         print(f"🎬 开始生成第{chapter_num}章的完整媒体内容...")
         
@@ -114,10 +112,11 @@ async def generate_scene_scripts(ctx: RunContext[MainAgentDeps], chapter_num: in
 
 
 @main_agent.tool
-def compose_final_video(ctx: RunContext[MainAgentDeps], chapter_num: int) -> str:
+def compose_final_video(ctx: RunContext[MainAgentDeps]) -> str:
     """
     合成指定章节的最终视频
     """
+    chapter_num = ctx.deps.chapter
     try:
         print(f"🎥 开始合成第{chapter_num}章最终视频...")
         
@@ -137,38 +136,28 @@ def compose_final_video(ctx: RunContext[MainAgentDeps], chapter_num: int) -> str
 @main_agent.tool
 def get_generation_progress(ctx: RunContext[MainAgentDeps]) -> str:
     """
-    获取当前生成进度
+    获取当前生成进度（单章节）
     """
-    start_chapter = ctx.deps.start_chapter
-    end_chapter = ctx.deps.end_chapter
-    total_chapters = end_chapter - start_chapter + 1
-    
-    completed_chapters = []
-    for chapter_num in range(start_chapter, end_chapter + 1):
-        video_path = f"output/chapters/chapter_{chapter_num}/generated_video.mp4"
-        if os.path.exists(video_path):
-            completed_chapters.append(chapter_num)
-    
-    progress = len(completed_chapters) / total_chapters * 100
-    
+    chapter_num = ctx.deps.chapter
+    video_path = f"output/chapters/chapter_{chapter_num}/generated_video.mp4"
+    completed = os.path.exists(video_path)
+    progress = 100.0 if completed else 0.0
     return f"""
 📊 当前生成进度:
-- 总章节数: {total_chapters}
-- 已完成章节: {len(completed_chapters)} ({completed_chapters})
+- 章节号: {chapter_num}
+- 是否已完成: {'是' if completed else '否'}
 - 完成进度: {progress:.1f}%
-- 剩余章节: {total_chapters - len(completed_chapters)}
 """
 
 
 # 便捷的启动函数
-async def start_video_generation(outline: str, start_chapter: int = 1, end_chapter: int = 1, requirement: str = '', scene_count: int = 5) -> str:
+async def start_video_generation(outline: str, chapter: int = 1, requirement: str = '', scene_count: int = 5) -> str:
     """
-    启动AI视频生成流程的便捷函数
+    启动AI视频生成流程的便捷函数（单章节）
     
     Args:
         outline: 小说大纲
-        start_chapter: 开始章节号
-        end_chapter: 结束章节号
+        chapter: 章节号
         requirement: 用户需求描述
         scene_count: 每章节的场景数量，范围5-50，默认5
     
@@ -176,21 +165,20 @@ async def start_video_generation(outline: str, start_chapter: int = 1, end_chapt
         生成结果描述
     """
     print("🎯 开始AI视频生成任务")
-    print(f"📖 章节范围: 第{start_chapter}章 - 第{end_chapter}章")
+    print(f"📖 章节号: 第{chapter}章")
     print(f"🎬 每章场景数量: {scene_count}个")
     print(f"📝 大纲: {outline[:100]}...")
     
     deps = MainAgentDeps(
         outline=outline,
-        start_chapter=start_chapter,
-        end_chapter=end_chapter,
+        chapter=chapter,
         scene_count=scene_count
     )
     
     try:
         async with main_agent.run_mcp_servers():
             result = await main_agent.run(
-                f"请为第{start_chapter}章到第{end_chapter}章生成完整的AI视频, {requirement}",
+                f"请为第{chapter}章生成完整的AI视频, {requirement}",
                 deps=deps,
             )
 
@@ -217,6 +205,5 @@ if __name__ == "__main__":
     # 运行示例
     asyncio.run(start_video_generation(
         outline=sample_outline,
-        start_chapter=1,
-        end_chapter=1
+        chapter=1
     ))

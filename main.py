@@ -108,21 +108,18 @@ async def main():
     print("-" * 30)
 
     # 配置生成参数
-    start_chapter = 1  # 开始章节
-    end_chapter = 1  # 结束章节（可以设置为3来生成所有章节）
+    chapter = 1
     scene_count = 15  # 每章节场景数量（范围：5-50）
 
     print("🎯 生成设置:")
-    print(f"   开始章节: 第{start_chapter}章")
-    print(f"   结束章节: 第{end_chapter}章")
+    print(f"   开始章节: 第{chapter}章")
     print(f"   每章场景数: {scene_count}个")
     print("=" * 50)
 
     # 启动AI视频生成
     result = await start_video_generation(
         outline=sample_outline,
-        start_chapter=start_chapter,
-        end_chapter=end_chapter,
+        chapter=chapter,
         scene_count=scene_count,
         requirement="情节跌宕起伏，要体现出复仇的爽感。",
     )
