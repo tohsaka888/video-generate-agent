@@ -223,24 +223,19 @@ def generate_complete_media_content(ctx: RunContext[SceneAgentDeps]) -> str:
 根据 output/chapters/chapter_{current_chapter}/index.txt 文件中的章节内容，结合用户提供的大纲，为本章节创作{scene_count}个分镜头。
 
 **Stable Diffusion提示词编写要求：**
-1. **必须使用英文**，遵循最佳SD提示词格式
-2. **权重和质量词汇**：
-   - 高质量词汇：masterpiece, best quality, ultra detailed, 8k, photorealistic
-   - 根据需要使用权重语法：(word:1.2) 或 ((word))
-3. **人物描述顺序**：主体 → 外貌特征 → 服装 → 表情动作
-4. **场景和构图**：环境描述 → 光照效果 → 镜头角度 → 艺术风格
-5. **人物一致性**：相同角色必须保持一致的外貌特征（发色、眼色、体型、服装风格等）
-6. **负向提示词考虑**：避免使用可能产生负面效果的词汇
+1. **必须使用英文**，遵循最佳SD动漫风格提示词格式
+2. **人物描述顺序**：主体 → 外貌特征 → 服装 → 表情动作
+3. **场景和构图**：环境描述 → 光照效果 → 镜头角度 → 艺术风格
+4. **人物一致性**：相同角色必须保持一致的外貌特征（发色、眼色、体型、服装风格等）
+5. **负向提示词考虑**：避免使用可能产生负面效果的词汇
 
 **提示词结构示例：**
 ```
-masterpiece, best quality, ultra detailed, (beautiful anime girl:1.2), solo, (silver hair:1.1), long hair, (blue eyes:1.1), school uniform, white shirt, blue skirt, (sitting on chair:1.1), classroom, soft lighting, anime style, detailed background, (sad expression:1.1)
+beautiful anime girl, solo, (silver hair:1.1), long hair, (blue eyes:1.1), school uniform, white shirt, blue skirt, (sitting on chair:1.1), classroom, soft lighting, anime style, detailed background, (sad expression:1.1)
 ```
 
 **原文脚本要求：**
 - 提取该镜头对应的小说原文内容
-- 确保文本适合语音合成（去除特殊符号，保持自然语调）
-- 每段脚本长度适中，便于生成音频和字幕
 
 **输出格式要求：**
 请将所有镜头的SD提示词和原文脚本以如下结构化JSON格式输出：
@@ -249,12 +244,12 @@ masterpiece, best quality, ultra detailed, (beautiful anime girl:1.2), solo, (si
   {{
     "scene_index": 1,
     "scene_prompt": "<遵循最佳实践的英文SD提示词>",
-    "scene_script": "<该镜头对应的小说原文>"
+    "scene_script": "<该镜头对应的小说原文（不要做翻译，保持原文）>"
   }},
   {{
     "scene_index": 2,
     "scene_prompt": "<遵循最佳实践的英文SD提示词>",
-    "scene_script": "<该镜头对应的小说原文>"
+    "scene_script": "<该镜头对应的小说原文（不要做翻译，保持原文）>"
   }},
   ...
 ]
@@ -269,10 +264,7 @@ masterpiece, best quality, ultra detailed, (beautiful anime girl:1.2), solo, (si
 调用 batch_generate_audio 工具，基于原文脚本批量生成音频和字幕文件。
 
 **重要提示：**
-- 确保所有SD提示词符合最佳实践，使用高质量描述词汇
 - 保持角色外貌的一致性，避免同一人物在不同场景中外貌差异过大
-- 原文脚本应忠实于小说内容，确保语音合成效果自然
-- 严格按照三个阶段顺序执行
 
 故事大纲：
 {outline}
@@ -319,10 +311,6 @@ def batch_generate_images(ctx: RunContext[SceneAgentDeps]) -> str:
         scene_content = item.get("scene_prompt", "").strip()
         image_path = os.path.join(images_dir, f"scene_{i}.png")
         try:
-            if os.path.exists(image_path):
-                print(f"⏭️ 第{i}张图片已存在，跳过生成: {image_path}")
-                generated_images.append(f"scene_{i}.png (已存在)")
-                continue
             print(f"🎨 正在生成第{i}/{len(scenes_scripts)}张图片...")
             result = generate_image(prompt_text=scene_content, save_path=image_path)
             if result and os.path.exists(image_path):
@@ -379,11 +367,6 @@ def batch_generate_audio(ctx: RunContext[SceneAgentDeps]) -> str:
         audio_path = os.path.join(audio_dir, f"audio_{i}.mp3")
         srt_path = os.path.join(srt_dir, f"srt_{i}.srt")
         try:
-            if os.path.exists(audio_path) and os.path.exists(srt_path):
-                print(f"⏭️ 第{i}个音频和字幕已存在，跳过生成")
-                generated_audio.append(f"audio_{i}.mp3 (已存在)")
-                generated_srt.append(f"srt_{i}.srt (已存在)")
-                continue
             print(f"🎵 正在生成第{i}/{len(scenes_scripts)}个音频文件...")
             # 直接用内容生成音频和字幕
             tmp_script_path = os.path.join(output_dir, f"tmp_script_{i}.txt")
@@ -451,12 +434,6 @@ def generate_chapter_images_directly(chapter_num: int) -> str:
             
             # 生成图片保存路径
             image_path = os.path.join(images_dir, f"scene_{i}.png")
-            
-            # 检查图片是否已存在
-            if os.path.exists(image_path):
-                print(f"⏭️ 第{i}张图片已存在，跳过生成: {image_path}")
-                generated_images.append(f"scene_{i}.png (已存在)")
-                continue
             
             print(f"🎨 正在生成第{i}/{len(scene_files)}张图片...")
             
@@ -530,13 +507,6 @@ def generate_chapter_audio_directly(chapter_num: int) -> str:
             # 生成输出路径
             audio_path = os.path.join(audio_dir, f"audio_{i}.mp3")
             srt_path = os.path.join(srt_dir, f"srt_{i}.srt")
-            
-            # 检查文件是否已存在
-            if os.path.exists(audio_path) and os.path.exists(srt_path):
-                print(f"⏭️ 第{i}个音频和字幕已存在，跳过生成")
-                generated_audio.append(f"audio_{i}.mp3 (已存在)")
-                generated_srt.append(f"srt_{i}.srt (已存在)")
-                continue
             
             print(f"🎵 正在生成第{i}/{len(script_files)}个音频文件...")
             

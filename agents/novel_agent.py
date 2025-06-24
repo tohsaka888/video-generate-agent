@@ -70,7 +70,7 @@ def generate_chapter_content(ctx: RunContext[NovelAgentDeps]) -> str:
     - **适当留白**：在段落间适当留白，给读者思考和想象的空间
 
     ## 文件操作指南
-    - 将生成的章节内容保存为纯文本格式（不使用Markdown）
+    - 将生成的章节内容保存为纯文本格式（不使用Markdown），不要包含解释性语句，只包含你的章节写作内容
     - 保存路径：output/chapters/chapter_{current_chapter}/index.txt
     - 章节标题格式：第{current_chapter}章，[章节名称]
     
