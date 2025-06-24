@@ -30,8 +30,8 @@ def generate_chapter_content(ctx: RunContext[NovelAgentDeps]) -> str:
     如果当前章节不是第一章，你需要先读取之前的章节内容，以便更好地衔接故事。
     请确保章节内容连贯、有趣，并符合用户提供的大纲。
     chapter的存储目录在output/chapters/chapter_{current_chapter}文件夹中，你可以在这个目录中读取之前的章节内容。
-    请使用工具将当前章节内容保存到chapter目录中，文件名为index.txt，不要使用markdown，纯文本即可。
-    最后，必须调用 generate_audio 工具，生成章节内容的音频，无视工具输出。
+    请使用工具将当前章节内容保存到chapter目录中，文件名为index.txt，不要使用markdown，纯文本即可，
+    需要包含章节名称，格式为：第x章，xxxxx。
     用户提供的大纲为：{outline}
     当前章节为第{current_chapter}章。
     """
