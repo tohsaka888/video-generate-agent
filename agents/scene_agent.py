@@ -219,45 +219,61 @@ def generate_complete_media_content(ctx: RunContext[SceneAgentDeps]) -> str:
 
 你的工作流程包括三个阶段：
 
-**阶段1：分镜stable diffusion prompt和脚本生成（结构化输出）**
-请根据 output/chapters/chapter_{current_chapter}/index.txt 文件中的章节内容，结合用户提供的大纲，为本章节创作分镜头脚本。
+**阶段1：分镜Stable Diffusion提示词和原文脚本生成（结构化输出）**
+根据 output/chapters/chapter_{current_chapter}/index.txt 文件中的章节内容，结合用户提供的大纲，为本章节创作{scene_count}个分镜头。
 
-- 共生成{scene_count}个镜头，每个镜头需详细描述，突出画面感，便于生成动漫风格或写实风格的图片。
-- 每个镜头描述需包含：
-  1. 人物：主要角色的外貌、服饰、神态、动作。
-  2. 场景：人物所处场景的关键词描述。
-  3. 镜头：角色的动作、互动，描述图片中的构图和人物关系（不包含对话）。
-- 每个stable diffusion的prompt至少100字，必须使用英文，必须包含embedding:lazypos。
-- 生成的多个prompt需要确保一致性，尤其是人物，对于相同的人物，除了神态、动作之外，其他细节（如服饰、身材、发型、发色等）需保持一致。
-- 每个镜头还需生成对应的脚本（scene_script），即该镜头的原文内容。
+**Stable Diffusion提示词编写要求：**
+1. **必须使用英文**，遵循最佳SD提示词格式
+2. **权重和质量词汇**：
+   - 必须包含：embedding:lazypos
+   - 高质量词汇：masterpiece, best quality, ultra detailed, 8k, photorealistic
+   - 根据需要使用权重语法：(word:1.2) 或 ((word))
+3. **人物描述顺序**：主体 → 外貌特征 → 服装 → 表情动作
+4. **场景和构图**：环境描述 → 光照效果 → 镜头角度 → 艺术风格
+5. **人物一致性**：相同角色必须保持一致的外貌特征（发色、眼色、体型、服装风格等）
+6. **负向提示词考虑**：避免使用可能产生负面效果的词汇
+
+**提示词结构示例：**
+```
+embedding:lazypos, masterpiece, best quality, ultra detailed, (beautiful anime girl:1.2), solo, (silver hair:1.1), long hair, (blue eyes:1.1), school uniform, white shirt, blue skirt, (sitting on chair:1.1), classroom, soft lighting, anime style, detailed background, (sad expression:1.1)
+```
+
+**原文脚本要求：**
+- 提取该镜头对应的小说原文内容
+- 确保文本适合语音合成（去除特殊符号，保持自然语调）
+- 每段脚本长度适中，便于生成音频和字幕
 
 **输出格式要求：**
-请将所有镜头的分镜描述和脚本以如下结构化JSON格式输出：
+请将所有镜头的SD提示词和原文脚本以如下结构化JSON格式输出：
 ```json
 [
   {{
     "scene_index": 1,
-    "scene_prompt": "<英文分镜描述，含embedding:lazypos>",
-    "scene_script": "<该镜头的原文内容>"
+    "scene_prompt": "<遵循最佳实践的英文SD提示词>",
+    "scene_script": "<该镜头对应的小说原文>"
+  }},
+  {{
+    "scene_index": 2,
+    "scene_prompt": "<遵循最佳实践的英文SD提示词>",
+    "scene_script": "<该镜头对应的小说原文>"
   }},
   ...
 ]
 ```
 
-输出后，调用 save_scenes_scripts 工具，将上述JSON一次性写入 output/chapters/chapter_{current_chapter}/scenes_scripts.json。
+生成完成后，调用 save_scenes_scripts 工具保存到 scenes_scripts.json。
 
 **阶段2：图片生成**
-完成分镜和脚本结构化输出后，调用 batch_generate_images 工具为所有场景生成图片。
+调用 batch_generate_images 工具，基于SD提示词批量生成高质量图片。
 
 **阶段3：音频生成**
-完成图片生成后，调用 batch_generate_audio 工具为所有脚本生成音频和字幕文件。
+调用 batch_generate_audio 工具，基于原文脚本批量生成音频和字幕文件。
 
-示例sd prompt描述：
-```
-embedding:lazypos, agirl, solo, white hair, long hair, school uniform, school, beautiful, red eyes, stockings, sit on the chair, sad
-```
-
-请严格按照上述三个阶段顺序执行，确保每个阶段完成后再进行下一阶段。
+**重要提示：**
+- 确保所有SD提示词符合最佳实践，使用高质量描述词汇
+- 保持角色外貌的一致性，避免同一人物在不同场景中外貌差异过大
+- 原文脚本应忠实于小说内容，确保语音合成效果自然
+- 严格按照三个阶段顺序执行
 
 故事大纲：
 {outline}
