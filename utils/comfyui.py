@@ -10,7 +10,6 @@ from PIL import Image
 import io
 import os
 import dotenv
-import requests
 
 dotenv.load_dotenv('.env')
 
@@ -71,6 +70,9 @@ def generate_image(prompt_text="", negative_prompt=None, save_path: str = '.'):
     #set the text prompt for our positive CLIPTextEncode
     workflow["6"]["inputs"]["text"] = prompt_text
 
+    # set random seed
+    workflow["3"]["inputs"]["seed"] = uuid.uuid4()
+
     ws = websocket.WebSocket()
     ws.connect("ws://{}/ws?clientId={}".format(server_address, client_id))
     images = get_images(ws, workflow)
@@ -82,7 +84,7 @@ def generate_image(prompt_text="", negative_prompt=None, save_path: str = '.'):
             image = Image.open(io.BytesIO(image_data))
             image.save(save_path)
 
-    return true
+    return True
 
 
 if __name__ == '__main__':
