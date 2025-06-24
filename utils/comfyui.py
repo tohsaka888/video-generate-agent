@@ -10,6 +10,7 @@ from PIL import Image
 import io
 import os
 import dotenv
+import random
 
 dotenv.load_dotenv('.env')
 
@@ -71,7 +72,8 @@ def generate_image(prompt_text="", negative_prompt=None, save_path: str = '.'):
     workflow["6"]["inputs"]["text"] = prompt_text
 
     # set random seed
-    workflow["3"]["inputs"]["seed"] = uuid.uuid4()
+    workflow["3"]["inputs"]["seed"] = random.randint(0, 2147483647)
+    
 
     ws = websocket.WebSocket()
     ws.connect("ws://{}/ws?clientId={}".format(server_address, client_id))
