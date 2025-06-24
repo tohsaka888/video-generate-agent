@@ -10,6 +10,7 @@ dependencies = [
     "google-genai>=1.19.0",
     "httpx[socks]>=0.28.1",
     "moviepy>=2.2.1",
+    "parsel>=1.10.0",
     "pillow>=11.2.1",
     "pydantic-ai[logfire]>=0.2.16",
     "pydub>=0.25.1",
