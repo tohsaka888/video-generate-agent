@@ -225,7 +225,6 @@ def generate_complete_media_content(ctx: RunContext[SceneAgentDeps]) -> str:
 **Stable Diffusion提示词编写要求：**
 1. **必须使用英文**，遵循最佳SD提示词格式
 2. **权重和质量词汇**：
-   - 必须包含：embedding:lazypos
    - 高质量词汇：masterpiece, best quality, ultra detailed, 8k, photorealistic
    - 根据需要使用权重语法：(word:1.2) 或 ((word))
 3. **人物描述顺序**：主体 → 外貌特征 → 服装 → 表情动作
@@ -235,7 +234,7 @@ def generate_complete_media_content(ctx: RunContext[SceneAgentDeps]) -> str:
 
 **提示词结构示例：**
 ```
-embedding:lazypos, masterpiece, best quality, ultra detailed, (beautiful anime girl:1.2), solo, (silver hair:1.1), long hair, (blue eyes:1.1), school uniform, white shirt, blue skirt, (sitting on chair:1.1), classroom, soft lighting, anime style, detailed background, (sad expression:1.1)
+masterpiece, best quality, ultra detailed, (beautiful anime girl:1.2), solo, (silver hair:1.1), long hair, (blue eyes:1.1), school uniform, white shirt, blue skirt, (sitting on chair:1.1), classroom, soft lighting, anime style, detailed background, (sad expression:1.1)
 ```
 
 **原文脚本要求：**
