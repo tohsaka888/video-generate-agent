@@ -8,6 +8,7 @@ from moviepy import (
 )
 from moviepy.video.VideoClip import VideoClip
 import os
+import random
 from moviepy.video.tools.subtitles import SubtitlesClip
 from typing import cast
 
@@ -94,6 +95,23 @@ def generate_video(current_chapter: int) -> None:
 
     # # 合并所有视频片段
     final_clip = concatenate_videoclips(clips=clips, method="compose")
+
+    # 添加BGM处理逻辑
+    bgm_path = "assets/bgm"
+    if os.path.exists(bgm_path) and os.path.isdir(bgm_path):
+        bgm_files = [
+            f for f in os.listdir(bgm_path) 
+            if f.lower().endswith(('.mp3', '.wav', '.ogg', '.m4a'))
+        ]
+        if bgm_files:
+            selected_bgm = random.choice(bgm_files)
+            bgm_clip = AudioFileClip(os.path.join(bgm_path, selected_bgm))
+            # 设置BGM音量为原声的30%
+            bgm_clip = bgm_clip.volumex(0.3)
+            # 循环BGM以匹配视频长度
+            bgm_clip = bgm_clip.loop(duration=final_clip.duration)
+            # 将BGM与原音频混合
+            final_clip = final_clip.set_audio(bgm_clip)
 
     final_clip.write_videofile(
         f"output/chapters/chapter_{current_chapter}/generated_video.mp4",
