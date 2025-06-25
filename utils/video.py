@@ -1,6 +1,7 @@
 from moviepy import (
     TextClip,
     CompositeVideoClip,
+    CompositeAudioClip,
     AudioFileClip,
     ImageClip,
     concatenate_videoclips,
@@ -107,11 +108,13 @@ def generate_video(current_chapter: int) -> None:
             selected_bgm = random.choice(bgm_files)
             bgm_clip = AudioFileClip(os.path.join(bgm_path, selected_bgm))
             # 设置BGM音量为原声的30%
-            bgm_clip = bgm_clip.volumex(0.3)
+            bgm_clip = bgm_clip.with_volume_scaled(0.1)
             # 循环BGM以匹配视频长度
-            bgm_clip = bgm_clip.loop(duration=final_clip.duration)
+            bgm_clip = bgm_clip.with_effects([vfx.Loop()]).with_duration(duration=final_clip.duration)
             # 将BGM与原音频混合
-            final_clip = final_clip.set_audio(bgm_clip)
+            original_audio = final_clip.audio
+            mixed_audio = CompositeAudioClip([original_audio, bgm_clip])
+            final_clip = final_clip.with_audio(mixed_audio)
 
     final_clip.write_videofile(
         f"output/chapters/chapter_{current_chapter}/generated_video.mp4",
