@@ -36,7 +36,9 @@ def orchestrate_video_generation(ctx: RunContext[MainAgentDeps]) -> str:
 
     你需要按照以下步骤为第{chapter}章生成完整的AI视频：
 
-    1. **文本生成阶段**: 调用 generate_chapter_content 工具生成章节文本内容
+    1. **文本生成阶段**: 调用 generate_chapter_content 工具生成或加载章节文本内容
+       - 如果检测到用户在 input/chapters/chapter_{chapter}/index.txt 已提供章节内容，则直接使用
+       - 如果用户未提供，则调用AI生成章节内容
     2. **完整媒体生成阶段**: 调用 generate_scene_scripts 工具生成分镜脚本、图片和音频（一站式完成）
     3. **视频合成阶段**: 调用 compose_final_video 工具将所有素材合成最终视频
 
@@ -47,6 +49,11 @@ def orchestrate_video_generation(ctx: RunContext[MainAgentDeps]) -> str:
     - 在每个步骤完成后，报告当前进度
 
     **用户提供的大纲**: {outline}
+
+    **用户章节内容检测**:
+    - 系统会自动检查 input/chapters/chapter_{chapter}/index.txt 是否存在
+    - 如果存在，将跳过AI生成，直接使用用户提供的章节内容
+    - 如果不存在，将根据大纲AI生成章节内容
 
     **注意事项**:
     - 每个步骤都需要等待前一步完全完成
@@ -62,25 +69,42 @@ def orchestrate_video_generation(ctx: RunContext[MainAgentDeps]) -> str:
 @main_agent.tool
 async def generate_chapter_content(ctx: RunContext[MainAgentDeps]) -> str:
     """
-    生成指定章节的文本内容
+    生成指定章节的文本内容，如果用户已经提供了章节内容则跳过生成
     """
     chapter_num = ctx.deps.chapter
     try:
-        print(f"🚀 开始生成第{chapter_num}章文本内容...")
-        
         # 创建章节目录
         chapter_dir = f"output/chapters/chapter_{chapter_num}"
         os.makedirs(chapter_dir, exist_ok=True)
         
-        # 调用novel_agent生成章节内容
-        deps = NovelAgentDeps(outline=ctx.deps.outline, current_chapter=chapter_num)
-        result = await novel_agent.run("请生成当前章节的内容", deps=deps)
+        # 检查用户是否已经提供了章节内容
+        user_chapter_path = f"input/chapters/chapter_{chapter_num}/index.txt"
+        output_chapter_path = f"{chapter_dir}/index.txt"
         
-        print(f"✅ 第{chapter_num}章文本内容生成完成")
-        return f"第{chapter_num}章文本内容已生成: {result.data}"
+        if os.path.exists(user_chapter_path):
+            print(f"� 检测到用户已提供第{chapter_num}章内容，跳过AI生成...")
+            
+            # 将用户提供的章节内容复制到输出目录
+            with open(user_chapter_path, "r", encoding="utf-8") as f:
+                chapter_content = f.read()
+            
+            with open(output_chapter_path, "w", encoding="utf-8") as f:
+                f.write(chapter_content)
+                
+            print(f"✅ 第{chapter_num}章内容已从用户提供的文件加载完成")
+            return f"第{chapter_num}章内容已从用户提供的文件加载: {user_chapter_path}"
+        else:
+            print(f"🚀 用户未提供第{chapter_num}章内容，开始AI生成...")
+            
+            # 调用novel_agent生成章节内容
+            deps = NovelAgentDeps(outline=ctx.deps.outline, current_chapter=chapter_num)
+            result = await novel_agent.run("请生成当前章节的内容", deps=deps)
+            
+            print(f"✅ 第{chapter_num}章文本内容AI生成完成")
+            return f"第{chapter_num}章文本内容已AI生成: {result.data}"
         
     except Exception as e:
-        error_msg = f"❌ 第{chapter_num}章文本生成失败: {str(e)}"
+        error_msg = f"❌ 第{chapter_num}章文本处理失败: {str(e)}"
         print(error_msg)
         return error_msg
 
@@ -148,6 +172,65 @@ def get_generation_progress(ctx: RunContext[MainAgentDeps]) -> str:
 - 是否已完成: {'是' if completed else '否'}
 - 完成进度: {progress:.1f}%
 """
+
+
+@main_agent.tool
+def check_user_provided_chapters(ctx: RunContext[MainAgentDeps]) -> str:
+    """
+    检查用户是否提供了章节内容，并显示相关信息
+    """
+    chapter_num = ctx.deps.chapter
+    user_chapter_path = f"input/chapters/chapter_{chapter_num}/index.txt"
+    
+    # 检查input目录结构
+    input_dir = "input/chapters"
+    if not os.path.exists(input_dir):
+        os.makedirs(input_dir, exist_ok=True)
+    
+    # 检查章节文件
+    chapter_exists = os.path.exists(user_chapter_path)
+    
+    result = f"""
+📁 用户章节内容检查结果:
+
+目标章节: 第{chapter_num}章
+预期路径: {user_chapter_path}
+文件存在: {'是' if chapter_exists else '否'}
+
+📝 使用说明:
+如果您希望使用自己编写的章节内容而不是AI生成，请：
+1. 在项目根目录创建 input/chapters/chapter_{chapter_num}/ 文件夹
+2. 在该文件夹下创建 index.txt 文件
+3. 将您的章节内容写入 index.txt 文件
+4. 重新运行视频生成程序
+
+📂 推荐的文件结构:
+input/
+└── chapters/
+    ├── chapter_1/
+    │   └── index.txt    # 第1章内容
+    ├── chapter_2/
+    │   └── index.txt    # 第2章内容
+    └── ...
+"""
+    
+    if chapter_exists:
+        # 读取文件信息
+        try:
+            with open(user_chapter_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            word_count = len(content)
+            result += f"""
+✅ 检测到用户提供的第{chapter_num}章内容:
+- 文件大小: {word_count} 字符
+- 内容预览: {content[:100]}{'...' if len(content) > 100 else ''}
+"""
+        except Exception as e:
+            result += f"""
+⚠️  文件存在但读取失败: {str(e)}
+"""
+    
+    return result
 
 
 # 便捷的启动函数
