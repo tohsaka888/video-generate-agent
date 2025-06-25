@@ -3,17 +3,20 @@ name = "video-generate-agent"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.10"
 dependencies = [
     "dotenv>=0.9.9",
     "edge-tts>=7.0.2",
+    "faster-whisper>=1.1.1",
     "google-genai>=1.19.0",
     "httpx[socks]>=0.28.1",
+    "indextts",
     "moviepy>=2.2.1",
     "parsel>=1.10.0",
     "pillow>=11.2.1",
     "pydantic-ai[logfire]>=0.2.16",
     "pydub>=0.25.1",
+    "pynini",
     "requests>=2.32.4",
     "websocket-client>=1.8.0",
 ]
@@ -21,3 +24,6 @@ dependencies = [
 [[tool.uv.index]]
 url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
 default = true
+
+[tool.uv.sources]
+indextts = { path = "index-tts" }
