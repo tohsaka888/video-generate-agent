@@ -11,7 +11,6 @@ import os
 
 @dataclass
 class MainAgentDeps:
-    outline: str
     chapter: int = 1  # 只支持单章节生成
     scene_count: int = 5  # 每章节的场景数量，默认5个，范围5-50
 
@@ -28,7 +27,6 @@ def orchestrate_video_generation(ctx: RunContext[MainAgentDeps]) -> str:
     """
     主控制器，协调整个AI视频生成流程（单章节）。
     """
-    outline = ctx.deps.outline
     chapter = ctx.deps.chapter
     
     system_instruction = f"""
@@ -48,12 +46,10 @@ def orchestrate_video_generation(ctx: RunContext[MainAgentDeps]) -> str:
     - 确保前一步完成后再执行下一步
     - 在每个步骤完成后，报告当前进度
 
-    **用户提供的大纲**: {outline}
-
     **用户章节内容检测**:
     - 系统会自动检查 input/chapters/chapter_{chapter}/index.txt 是否存在
     - 如果存在，将跳过AI生成，直接使用用户提供的章节内容
-    - 如果不存在，将根据大纲AI生成章节内容
+    - 如果不存在，将根据用户的需求生成章节内容
 
     **注意事项**:
     - 每个步骤都需要等待前一步完全完成
@@ -67,7 +63,7 @@ def orchestrate_video_generation(ctx: RunContext[MainAgentDeps]) -> str:
 
 
 @main_agent.tool
-async def generate_chapter_content(ctx: RunContext[MainAgentDeps]) -> str:
+async def generate_chapter_content(ctx: RunContext[MainAgentDeps], outline: str) -> str:
     """
     生成指定章节的文本内容，如果用户已经提供了章节内容则跳过生成
     """
@@ -78,26 +74,17 @@ async def generate_chapter_content(ctx: RunContext[MainAgentDeps]) -> str:
         os.makedirs(chapter_dir, exist_ok=True)
         
         # 检查用户是否已经提供了章节内容
-        user_chapter_path = f"input/chapters/chapter_{chapter_num}/index.txt"
         output_chapter_path = f"{chapter_dir}/index.txt"
         
-        if os.path.exists(user_chapter_path):
-            print(f"� 检测到用户已提供第{chapter_num}章内容，跳过AI生成...")
-            
-            # 将用户提供的章节内容复制到输出目录
-            with open(user_chapter_path, "r", encoding="utf-8") as f:
-                chapter_content = f.read()
-            
-            with open(output_chapter_path, "w", encoding="utf-8") as f:
-                f.write(chapter_content)
-                
-            print(f"✅ 第{chapter_num}章内容已从用户提供的文件加载完成")
-            return f"第{chapter_num}章内容已从用户提供的文件加载: {user_chapter_path}"
+        if os.path.exists(output_chapter_path):
+            print(f"检测到用户已提供第{chapter_num}章内容，跳过AI生成...")
+
+            return f"第{chapter_num}章文本内容已存在: {output_chapter_path}"
         else:
             print(f"🚀 用户未提供第{chapter_num}章内容，开始AI生成...")
             
             # 调用novel_agent生成章节内容
-            deps = NovelAgentDeps(outline=ctx.deps.outline, current_chapter=chapter_num)
+            deps = NovelAgentDeps(current_chapter=chapter_num, outline=outline)
             result = await novel_agent.run("请生成当前章节的内容", deps=deps)
             
             print(f"✅ 第{chapter_num}章文本内容AI生成完成")
@@ -110,7 +97,7 @@ async def generate_chapter_content(ctx: RunContext[MainAgentDeps]) -> str:
 
 
 @main_agent.tool
-async def generate_scene_scripts(ctx: RunContext[MainAgentDeps]) -> str:
+async def generate_scene_scripts(ctx: RunContext[MainAgentDeps], outline: str) -> str:
     """
     生成指定章节的分镜头脚本、图片和音频（完整流程）
     """
@@ -120,7 +107,7 @@ async def generate_scene_scripts(ctx: RunContext[MainAgentDeps]) -> str:
         
         # 调用scene_agent生成完整的媒体内容（分镜脚本+图片+音频）
         deps = SceneAgentDeps(
-            outline=ctx.deps.outline, 
+            outline=outline, 
             current_chapter=chapter_num,
             scene_count=ctx.deps.scene_count
         )
@@ -234,7 +221,7 @@ input/
 
 
 # 便捷的启动函数
-async def start_video_generation(outline: str, chapter: int = 1, requirement: str = '', scene_count: int = 5) -> str:
+async def start_video_generation(chapter: int = 1, requirement: str = '', scene_count: int = 5) -> str:
     """
     启动AI视频生成流程的便捷函数（单章节）
     
@@ -250,10 +237,8 @@ async def start_video_generation(outline: str, chapter: int = 1, requirement: st
     print("🎯 开始AI视频生成任务")
     print(f"📖 章节号: 第{chapter}章")
     print(f"🎬 每章场景数量: {scene_count}个")
-    print(f"📝 大纲: {outline[:100]}...")
     
     deps = MainAgentDeps(
-        outline=outline,
         chapter=chapter,
         scene_count=scene_count
     )
