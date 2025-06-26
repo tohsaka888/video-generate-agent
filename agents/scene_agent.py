@@ -150,8 +150,8 @@ def batch_generate_media_concurrent(ctx: RunContext[SceneAgentDeps]) -> str:
     if error_msg:
         return error_msg
     
-    # 并发生成媒体文件
-    result = generate_media_concurrent(scenes_scripts, dirs, max_workers=4)
+    # 并发生成媒体文件（新版已不需要 max_workers 参数）
+    result = generate_media_concurrent(scenes_scripts, dirs)
     
     # 生成并返回报告
     report = generate_media_report(chapter_num, result, len(scenes_scripts))
