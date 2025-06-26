@@ -7,6 +7,13 @@ from utils.llm import chat_model
 from utils.mcp import filesystem_mcp
 from utils.comfyui import generate_image
 from utils.tts import generate_audio_for_script
+from utils.media_generator import (
+    load_scenes_scripts,
+    generate_media_concurrent,
+    generate_media_report,
+    setup_chapter_directories,
+    validate_scenes_scripts
+)
 
 
 def validate_scene_count(scene_count: int) -> int:
@@ -104,11 +111,8 @@ beautiful anime girl, solo, (silver hair:1.1), long hair, (blue eyes:1.1), schoo
 
 生成完成后，调用 save_scenes_scripts 工具保存到 scenes_scripts.json。
 
-**阶段2：图片生成**
-调用 batch_generate_images 工具，基于SD提示词批量生成高质量图片。
-
-**阶段3：音频生成**
-调用 batch_generate_audio 工具，基于原文脚本批量生成音频和字幕文件。
+**阶段2&3：并发生成图片和音频**
+调用 batch_generate_media_concurrent 工具，基于SD提示词和原文脚本并发生成高质量图片、音频和字幕文件，大幅减少总体生成时间。
 
 **重要提示：**
 - 保持角色外貌的一致性，避免同一人物在不同场景中外貌差异过大
@@ -126,328 +130,38 @@ def save_scenes_scripts(ctx: RunContext[SceneAgentDeps], scenes_scripts: list) -
     scenes_scripts: List[dict]，每项包含scene_index, scene_prompt, scene_script, voice_type。
     """
     chapter_num = ctx.deps.current_chapter
-    output_dir = f"output/chapters/chapter_{chapter_num}"
-    os.makedirs(output_dir, exist_ok=True)
-    json_path = os.path.join(output_dir, "scenes_scripts.json")
-    
-    # 验证音色类型
-    valid_voice_types = {"male", "female", "narrator"}
-    for scene in scenes_scripts:
-        voice_type = scene.get("voice_type", "narrator")
-        if voice_type not in valid_voice_types:
-            print(f"警告：场景 {scene.get('scene_index')} 的音色类型 '{voice_type}' 无效，已调整为 'narrator'")
-            scene["voice_type"] = "narrator"
-    
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(scenes_scripts, f, ensure_ascii=False, indent=2)
-    return f"✅ 已保存所有分镜、脚本和音色配置到 {json_path}"
-
-
-@scene_agent.tool
-def batch_generate_images(ctx: RunContext[SceneAgentDeps]) -> str:
-    """
-    批量生成图片，读取scenes_scripts.json。
-    """
-    chapter_num = ctx.deps.current_chapter
-    output_dir = f"output/chapters/chapter_{chapter_num}"
-    images_dir = os.path.join(output_dir, "images")
-    json_path = os.path.join(output_dir, "scenes_scripts.json")
-    os.makedirs(images_dir, exist_ok=True)
-    if not os.path.exists(json_path):
-        return f"❌ 未找到 {json_path}，请先生成分镜和脚本"
-    with open(json_path, "r", encoding="utf-8") as f:
-        scenes_scripts = json.load(f)
-    if not scenes_scripts:
-        return f"❌ {json_path} 为空"
-    generated_images = []
-    failed_images = []
-    print(f"🖼️ 开始批量生成第{chapter_num}章的{len(scenes_scripts)}张图片...")
-    for item in scenes_scripts:
-        i = item.get("scene_index")
-        scene_content = item.get("scene_prompt", "").strip()
-        image_path = os.path.join(images_dir, f"scene_{i}.png")
-        try:
-            print(f"🎨 正在生成第{i}/{len(scenes_scripts)}张图片...")
-            result = generate_image(prompt_text=scene_content, save_path=image_path)
-            if result and os.path.exists(image_path):
-                generated_images.append(f"scene_{i}.png")
-                print(f"✅ 第{i}张图片生成成功: scene_{i}.png")
-            else:
-                failed_images.append(f"scene_{i}.png")
-                print(f"❌ 第{i}张图片生成失败")
-        except Exception as e:
-            failed_images.append(f"scene_{i}.png (错误: {str(e)})")
-            print(f"❌ 第{i}张图片生成异常: {str(e)}")
-    total_scenes = len(scenes_scripts)
-    success_count = len(generated_images)
-    failed_count = len(failed_images)
-    result_report = f"""
-📊 第{chapter_num}章图片生成完成报告:
-- 总场景数: {total_scenes}
-- 成功生成: {success_count}张
-- 生成失败: {failed_count}张
-- 成功率: {(success_count/total_scenes*100):.1f}%\n\n✅ 成功生成的图片:\n{chr(10).join(f'  - {img}' for img in generated_images)}
-"""
-    if failed_images:
-        result_report += f"""
-❌ 生成失败的图片:\n{chr(10).join(f'  - {img}' for img in failed_images)}
-"""
-    print(result_report)
-    return result_report
-
-@scene_agent.tool
-def batch_generate_audio(ctx: RunContext[SceneAgentDeps]) -> str:
-    """
-    批量生成音频和字幕，读取scenes_scripts.json。
-    """
-    chapter_num = ctx.deps.current_chapter
-    output_dir = f"output/chapters/chapter_{chapter_num}"
-    audio_dir = os.path.join(output_dir, "audio")
-    srt_dir = os.path.join(output_dir, "srt")
-    json_path = os.path.join(output_dir, "scenes_scripts.json")
-    os.makedirs(audio_dir, exist_ok=True)
-    os.makedirs(srt_dir, exist_ok=True)
-    if not os.path.exists(json_path):
-        return f"❌ 未找到 {json_path}，请先生成分镜和脚本"
-    with open(json_path, "r", encoding="utf-8") as f:
-        scenes_scripts = json.load(f)
-    if not scenes_scripts:
-        return f"❌ {json_path} 为空"
-    generated_audio = []
-    generated_srt = []
-    failed_items = []
-    print(f"🔊 开始批量生成第{chapter_num}章的{len(scenes_scripts)}个音频文件...")
-    for item in scenes_scripts:
-        i = item.get("scene_index")
-        script_content = item.get("scene_script", "").strip()
-        voice_type = item.get("voice_type", "narrator")  # 获取音色类型，默认为旁白
-        audio_path = os.path.join(audio_dir, f"audio_{i}.mp3")
-        srt_path = os.path.join(srt_dir, f"srt_{i}.srt")
-        try:
-            print(f"🎵 正在生成第{i}/{len(scenes_scripts)}个音频文件（音色：{voice_type}）...")
-            # 直接用内容生成音频和字幕
-            tmp_script_path = os.path.join(output_dir, f"tmp_script_{i}.txt")
-            with open(tmp_script_path, "w", encoding="utf-8") as ftmp:
-                ftmp.write(script_content)
-            # 传递音色类型参数给 TTS 函数
-            result = generate_audio_for_script(tmp_script_path, audio_path, srt_path, voice_type=voice_type)
-            os.remove(tmp_script_path)
-            if "已生成音频和字幕文件" in result or "音频和字幕生成完成" in result:
-                generated_audio.append(f"audio_{i}.mp3")
-                generated_srt.append(f"srt_{i}.srt")
-                print(f"✅ 第{i}个音频和字幕生成成功")
-            else:
-                failed_items.append(f"audio_{i}.mp3 / srt_{i}.srt")
-                print(f"❌ 第{i}个音频生成失败")
-        except Exception as e:
-            failed_items.append(f"audio_{i}.mp3 / srt_{i}.srt (错误: {str(e)})")
-            print(f"❌ 第{i}个音频生成异常: {str(e)}")
-    total_scripts = len(scenes_scripts)
-    success_count = len(generated_audio)
-    failed_count = len(failed_items)
-    result_report = f"""
-📊 第{chapter_num}章音频生成完成报告:
-- 总脚本数: {total_scripts}
-- 成功生成: {success_count}个音频
-- 生成失败: {failed_count}个音频
-- 成功率: {(success_count/total_scripts*100):.1f}%\n\n✅ 成功生成的音频:\n{chr(10).join(f'  - {audio}' for audio in generated_audio)}\n\n✅ 成功生成的字幕:\n{chr(10).join(f'  - {srt}' for srt in generated_srt)}
-"""
-    if failed_items:
-        result_report += f"""
-❌ 生成失败的项目:\n{chr(10).join(f'  - {item}' for item in failed_items)}
-"""
-    print(result_report)
-    return result_report
-
-
-# 用于直接调用的便捷函数，可以在其他地方直接使用
-def generate_chapter_images_directly(chapter_num: int) -> str:
-    """
-    直接生成指定章节的所有图片，不通过agent调用。
-    这是一个便捷函数，可以在需要时直接调用。
-    """
-    scenes_dir = f"output/chapters/chapter_{chapter_num}/scenes"
-    images_dir = f"output/chapters/chapter_{chapter_num}/images"
-    
-    # 创建图片输出目录
-    os.makedirs(images_dir, exist_ok=True)
-    
-    # 获取所有场景文件
-    scene_files = glob.glob(os.path.join(scenes_dir, "scene_*.txt"))
-    scene_files.sort(key=lambda x: int(os.path.basename(x).split('_')[1].split('.')[0]))
-    
-    if not scene_files:
-        return f"❌ 未找到第{chapter_num}章的场景文件，请先生成分镜脚本"
-    
-    generated_images = []
-    failed_images = []
-    
-    print(f"🖼️ 开始批量生成第{chapter_num}章的{len(scene_files)}张图片...")
-    
-    for i, scene_file in enumerate(scene_files, 1):
-        try:
-            # 读取场景描述
-            with open(scene_file, 'r', encoding='utf-8') as f:
-                scene_content = f.read().strip()
-            
-            # 生成图片保存路径
-            image_path = os.path.join(images_dir, f"scene_{i}.png")
-            
-            print(f"🎨 正在生成第{i}/{len(scene_files)}张图片...")
-            
-            # 调用图片生成
-            result = generate_image(prompt_text=scene_content, save_path=image_path)
-            
-            if result and os.path.exists(image_path):
-                generated_images.append(f"scene_{i}.png")
-                print(f"✅ 第{i}张图片生成成功: scene_{i}.png")
-            else:
-                failed_images.append(f"scene_{i}.png")
-                print(f"❌ 第{i}张图片生成失败")
-                
-        except Exception as e:
-            failed_images.append(f"scene_{i}.png (错误: {str(e)})")
-            print(f"❌ 第{i}张图片生成异常: {str(e)}")
-    
-    # 生成结果报告
-    total_scenes = len(scene_files)
-    success_count = len(generated_images)
-    failed_count = len(failed_images)
-    
-    result_report = f"""
-📊 第{chapter_num}章图片生成完成报告:
-- 总场景数: {total_scenes}
-- 成功生成: {success_count}张
-- 生成失败: {failed_count}张
-- 成功率: {(success_count/total_scenes*100):.1f}%
-
-✅ 成功生成的图片:
-{chr(10).join(f"  - {img}" for img in generated_images)}
-"""
-    
-    if failed_images:
-        result_report += f"""
-❌ 生成失败的图片:
-{chr(10).join(f"  - {img}" for img in failed_images)}
-"""
-    
-    return result_report
-
-
-def generate_chapter_audio_directly(chapter_num: int) -> str:
-    """
-    直接生成指定章节的所有音频和字幕，不通过agent调用。
-    这是一个便捷函数，可以在需要时直接调用。
-    """
-    output_dir = f"output/chapters/chapter_{chapter_num}"
-    audio_dir = os.path.join(output_dir, "audio")
-    srt_dir = os.path.join(output_dir, "srt")
-    json_path = os.path.join(output_dir, "scenes_scripts.json")
+    dirs = setup_chapter_directories(chapter_num)
     
     # 创建输出目录
-    os.makedirs(audio_dir, exist_ok=True)
-    os.makedirs(srt_dir, exist_ok=True)
+    os.makedirs(dirs["output_dir"], exist_ok=True)
     
-    # 检查是否存在新格式的 JSON 文件
-    if os.path.exists(json_path):
-        with open(json_path, "r", encoding="utf-8") as f:
-            scenes_scripts = json.load(f)
-        
-        if not scenes_scripts:
-            return f"❌ {json_path} 为空"
-        
-        generated_audio = []
-        generated_srt = []
-        failed_items = []
-        
-        print(f"🔊 开始批量生成第{chapter_num}章的{len(scenes_scripts)}个音频文件...")
-        
-        for item in scenes_scripts:
-            i = item.get("scene_index")
-            script_content = item.get("scene_script", "").strip()
-            voice_type = item.get("voice_type", "narrator")  # 获取音色类型，默认为旁白
-            audio_path = os.path.join(audio_dir, f"audio_{i}.mp3")
-            srt_path = os.path.join(srt_dir, f"srt_{i}.srt")
-            
-            try:
-                print(f"🎵 正在生成第{i}/{len(scenes_scripts)}个音频文件（音色：{voice_type}）...")
-                # 直接用内容生成音频和字幕
-                tmp_script_path = os.path.join(output_dir, f"tmp_script_{i}.txt")
-                with open(tmp_script_path, "w", encoding="utf-8") as ftmp:
-                    ftmp.write(script_content)
-                # 传递音色类型参数给 TTS 函数
-                result = generate_audio_for_script(tmp_script_path, audio_path, srt_path, voice_type=voice_type)
-                os.remove(tmp_script_path)
-                
-                if "已生成音频和字幕文件" in result or "音频和字幕生成完成" in result:
-                    generated_audio.append(f"audio_{i}.mp3")
-                    generated_srt.append(f"srt_{i}.srt")
-                    print(f"✅ 第{i}个音频和字幕生成成功")
-                else:
-                    failed_items.append(f"audio_{i}.mp3 / srt_{i}.srt")
-                    print(f"❌ 第{i}个音频生成失败")
-                    
-            except Exception as e:
-                failed_items.append(f"audio_{i}.mp3 / srt_{i}.srt (错误: {str(e)})")
-                print(f"❌ 第{i}个音频生成异常: {str(e)}")
-        
-        total_scripts = len(scenes_scripts)
-        success_count = len(generated_audio)
-        failed_count = len(failed_items)
-        
-    else:
-        # 兼容旧的目录结构
-        scripts_dir = f"output/chapters/chapter_{chapter_num}/scripts"
-        script_files = glob.glob(os.path.join(scripts_dir, "script_*.txt"))
-        script_files.sort(key=lambda x: int(os.path.basename(x).split('_')[1].split('.')[0]))
-        
-        if not script_files:
-            return f"❌ 未找到第{chapter_num}章的脚本文件或场景配置，请先生成分镜脚本"
-        
-        generated_audio = []
-        generated_srt = []
-        failed_items = []
-        
-        print(f"🔊 开始批量生成第{chapter_num}章的{len(script_files)}个音频文件（使用旧格式，默认旁白音色）...")
-        
-        for i, script_file in enumerate(script_files, 1):
-            try:
-                # 生成输出路径
-                audio_path = os.path.join(audio_dir, f"audio_{i}.mp3")
-                srt_path = os.path.join(srt_dir, f"srt_{i}.srt")
-                
-                print(f"🎵 正在生成第{i}/{len(script_files)}个音频文件...")
-                
-                # 调用音频生成，使用默认旁白音色
-                result = generate_audio_for_script(script_file, audio_path, srt_path, voice_type="narrator")
-                
-                if "已生成音频和字幕文件" in result or "音频和字幕生成完成" in result:
-                    generated_audio.append(f"audio_{i}.mp3")
-                    generated_srt.append(f"srt_{i}.srt")
-                    print(f"✅ 第{i}个音频和字幕生成成功")
-                else:
-                    failed_items.append(f"audio_{i}.mp3 / srt_{i}.srt")
-                    print(f"❌ 第{i}个音频生成失败")
-                    
-            except Exception as e:
-                failed_items.append(f"audio_{i}.mp3 / srt_{i}.srt (错误: {str(e)})")
-                print(f"❌ 第{i}个音频生成异常: {str(e)}")
-        
-        total_scripts = len(script_files)
-        success_count = len(generated_audio)
-        failed_count = len(failed_items)
+    # 验证和修正数据
+    validated_scripts = validate_scenes_scripts(scenes_scripts)
     
-    result_report = f"""
-📊 第{chapter_num}章音频生成完成报告:
-- 总脚本数: {total_scripts}
-- 成功生成: {success_count}个音频
-- 生成失败: {failed_count}个音频
-- 成功率: {(success_count/total_scripts*100):.1f}%\n\n✅ 成功生成的音频:\n{chr(10).join(f'  - {audio}' for audio in generated_audio)}\n\n✅ 成功生成的字幕:\n{chr(10).join(f'  - {srt}' for srt in generated_srt)}
-"""
+    # 保存到JSON文件
+    with open(dirs["json_path"], "w", encoding="utf-8") as f:
+        json.dump(validated_scripts, f, ensure_ascii=False, indent=2)
     
-    if failed_items:
-        result_report += f"""
-❌ 生成失败的项目:\n{chr(10).join(f'  - {item}' for item in failed_items)}
-"""
+    return f"✅ 已保存所有分镜、脚本和音色配置到 {dirs['json_path']}"
+
+
+@scene_agent.tool
+def batch_generate_media_concurrent(ctx: RunContext[SceneAgentDeps]) -> str:
+    """
+    并发批量生成图片和音频，读取scenes_scripts.json，同时执行图片和音频生成以减少总时间。
+    """
+    chapter_num = ctx.deps.current_chapter
+    dirs = setup_chapter_directories(chapter_num)
     
-    return result_report
+    # 加载场景脚本配置
+    scenes_scripts, error_msg = load_scenes_scripts(dirs["json_path"])
+    if error_msg:
+        return error_msg
+    
+    # 并发生成媒体文件
+    result = generate_media_concurrent(scenes_scripts, dirs, max_workers=4)
+    
+    # 生成并返回报告
+    report = generate_media_report(chapter_num, result, len(scenes_scripts))
+    print(report)
+    return report
