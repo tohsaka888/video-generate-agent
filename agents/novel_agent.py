@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any
 from pydantic_ai import Agent, RunContext
 from utils.llm import chat_model
 from utils.mcp import filesystem_mcp
-from utils.novel_reader import NovelReader
+import utils.novel_reader as novel_reader
 
 
 @dataclass
@@ -85,15 +85,12 @@ def init_novel_reading(ctx: RunContext[NovelAgentDeps], file_path: str) -> str:
         str: 初始化结果信息
     """
     try:
-        # 创建小说阅读器实例
-        reader = NovelReader()
-        
         # 初始化文件读取状态
-        state = reader.init_novel_file(file_path, ctx.deps.chunk_size)
+        state = novel_reader.init_novel_file(file_path, ctx.deps.chunk_size)
         
-        progress_info = reader.get_reading_progress(file_path)
+        progress_info = novel_reader.get_reading_progress(file_path)
         if progress_info is None:
-            return f"❌ 获取进度信息失败"
+            return "❌ 获取进度信息失败"
         
         return f"""✅ 小说文件初始化成功！
 
@@ -125,10 +122,8 @@ def read_novel_chunk(ctx: RunContext[NovelAgentDeps], file_path: str) -> str:
         str: 读取的文本内容和状态信息
     """
     try:
-        reader = NovelReader()
-        
         # 读取下一个文本块
-        chunk_text, is_end, read_info = reader.read_next_chunk(
+        chunk_text, is_end, read_info = novel_reader.read_next_chunk(
             file_path, 
             overlap_sentences=ctx.deps.overlap_sentences
         )
@@ -165,8 +160,7 @@ def get_reading_progress(ctx: RunContext[NovelAgentDeps], file_path: str) -> str
         str: 进度信息
     """
     try:
-        reader = NovelReader()
-        progress = reader.get_reading_progress(file_path)
+        progress = novel_reader.get_reading_progress(file_path)
         
         if progress is None:
             return f"❌ 文件 {file_path} 未初始化，请先调用 init_novel_reading"
@@ -197,8 +191,7 @@ def reset_reading_position(ctx: RunContext[NovelAgentDeps], file_path: str) -> s
         str: 重置结果
     """
     try:
-        reader = NovelReader()
-        success = reader.reset_reading_position(file_path)
+        success = novel_reader.reset_reading_position(file_path)
         
         if success:
             return f"✅ 已重置文件 {file_path} 的读取位置到开头"
@@ -222,8 +215,7 @@ def set_reading_position(ctx: RunContext[NovelAgentDeps], file_path: str, positi
         str: 设置结果
     """
     try:
-        reader = NovelReader()
-        success = reader.set_reading_position(file_path, position)
+        success = novel_reader.set_reading_position(file_path, position)
         
         if success:
             return f"✅ 已设置文件 {file_path} 的读取位置到 {position}"
@@ -243,8 +235,7 @@ def list_all_reading_states(ctx: RunContext[NovelAgentDeps]) -> str:
         str: 所有文件的读取状态信息
     """
     try:
-        reader = NovelReader()
-        states = reader.list_reading_states()
+        states = novel_reader.list_reading_states()
         
         if not states:
             return "📝 当前没有任何小说文件的读取记录"
