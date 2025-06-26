@@ -1,12 +1,9 @@
 import os
-import glob
 import json
 from dataclasses import dataclass
 from pydantic_ai import Agent, RunContext
 from utils.llm import chat_model
 from utils.mcp import filesystem_mcp
-from utils.comfyui import generate_image
-from utils.tts import generate_audio_for_script
 from utils.media_generator import (
     load_scenes_scripts,
     generate_media_concurrent,
@@ -85,8 +82,8 @@ beautiful anime girl, solo, (silver hair:1.1), long hair, (blue eyes:1.1), schoo
 
 **音色配置要求：**
 为每个脚本段落分析语义并选择合适的音色：
-- **男声(male)**：男性角色对话、男性视角的独白
-- **女声(female)**：女性角色对话、女性视角的独白
+- **男声(male)**：男性角色对话、男性角色的内心独白
+- **女声(female)**：女性角色对话、女性角色的内心独白
 - **旁白(narrator)**：环境描述、心理描述、故事叙述等非对话内容
 
 **输出格式要求：**
