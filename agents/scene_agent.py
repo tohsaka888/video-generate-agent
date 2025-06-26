@@ -1,6 +1,5 @@
 import os
 import glob
-import re
 import json
 from dataclasses import dataclass
 from pydantic_ai import Agent, RunContext
@@ -44,21 +43,6 @@ scene_agent = Agent(
     model=chat_model, deps_type=SceneAgentDeps, mcp_servers=[filesystem_mcp]
 )
 
-def generate_audio_for_script(script_path: str, audio_path: str, srt_path: str) -> str:
-    """
-    为单个脚本文件生成音频和字幕的核心函数。
-    使用优化后的TTS方法替代edge-tts。
-    """
-    # 导入TTS函数
-    from utils.tts import generate_audio_for_script as tts_generate
-    
-    # 直接调用优化后的TTS方法
-    try:
-        result = tts_generate(script_path, audio_path, srt_path)
-        return result
-    except Exception as e:
-        raise Exception(f"音频生成失败: {str(e)}")
-
 
 @scene_agent.instructions
 def generate_complete_media_content(ctx: RunContext[SceneAgentDeps]) -> str:
@@ -92,19 +76,27 @@ beautiful anime girl, solo, (silver hair:1.1), long hair, (blue eyes:1.1), schoo
 **原文脚本要求：**
 - 提取该镜头对应的小说原文内容
 
+**音色配置要求：**
+为每个脚本段落分析语义并选择合适的音色：
+- **男声(male)**：男性角色对话、男性视角的独白
+- **女声(female)**：女性角色对话、女性视角的独白
+- **旁白(narrator)**：环境描述、心理描述、故事叙述等非对话内容
+
 **输出格式要求：**
-请将所有镜头的SD提示词和原文脚本以如下结构化JSON格式输出：
+请将所有镜头的SD提示词、原文脚本和音色配置以如下结构化JSON格式输出：
 ```json
 [
   {{
     "scene_index": 1,
     "scene_prompt": "<遵循最佳实践的英文SD提示词>",
-    "scene_script": "<该镜头对应的小说原文（不要做翻译，保持原文）>"
+    "scene_script": "<该镜头对应的小说原文（不要做翻译，保持原文）>",
+    "voice_type": "<male/female/narrator之一>"
   }},
   {{
     "scene_index": 2,
     "scene_prompt": "<遵循最佳实践的英文SD提示词>",
-    "scene_script": "<该镜头对应的小说原文（不要做翻译，保持原文）>"
+    "scene_script": "<该镜头对应的小说原文（不要做翻译，保持原文）>",
+    "voice_type": "<male/female/narrator之一>"
   }},
   ...
 ]
@@ -131,15 +123,24 @@ beautiful anime girl, solo, (silver hair:1.1), long hair, (blue eyes:1.1), schoo
 def save_scenes_scripts(ctx: RunContext[SceneAgentDeps], scenes_scripts: list) -> str:
     """
     工具：将所有分镜和脚本一次性写入json文件。
-    scenes_scripts: List[dict]，每项包含scene_index, scene_prompt, scene_script。
+    scenes_scripts: List[dict]，每项包含scene_index, scene_prompt, scene_script, voice_type。
     """
     chapter_num = ctx.deps.current_chapter
     output_dir = f"output/chapters/chapter_{chapter_num}"
     os.makedirs(output_dir, exist_ok=True)
     json_path = os.path.join(output_dir, "scenes_scripts.json")
+    
+    # 验证音色类型
+    valid_voice_types = {"male", "female", "narrator"}
+    for scene in scenes_scripts:
+        voice_type = scene.get("voice_type", "narrator")
+        if voice_type not in valid_voice_types:
+            print(f"警告：场景 {scene.get('scene_index')} 的音色类型 '{voice_type}' 无效，已调整为 'narrator'")
+            scene["voice_type"] = "narrator"
+    
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(scenes_scripts, f, ensure_ascii=False, indent=2)
-    return f"✅ 已保存所有分镜和脚本到 {json_path}"
+    return f"✅ 已保存所有分镜、脚本和音色配置到 {json_path}"
 
 
 @scene_agent.tool
@@ -219,15 +220,17 @@ def batch_generate_audio(ctx: RunContext[SceneAgentDeps]) -> str:
     for item in scenes_scripts:
         i = item.get("scene_index")
         script_content = item.get("scene_script", "").strip()
+        voice_type = item.get("voice_type", "narrator")  # 获取音色类型，默认为旁白
         audio_path = os.path.join(audio_dir, f"audio_{i}.mp3")
         srt_path = os.path.join(srt_dir, f"srt_{i}.srt")
         try:
-            print(f"🎵 正在生成第{i}/{len(scenes_scripts)}个音频文件...")
+            print(f"🎵 正在生成第{i}/{len(scenes_scripts)}个音频文件（音色：{voice_type}）...")
             # 直接用内容生成音频和字幕
             tmp_script_path = os.path.join(output_dir, f"tmp_script_{i}.txt")
             with open(tmp_script_path, "w", encoding="utf-8") as ftmp:
                 ftmp.write(script_content)
-            result = generate_audio_for_script(tmp_script_path, audio_path, srt_path)
+            # 传递音色类型参数给 TTS 函数
+            result = generate_audio_for_script(tmp_script_path, audio_path, srt_path, voice_type=voice_type)
             os.remove(tmp_script_path)
             if "已生成音频和字幕文件" in result or "音频和字幕生成完成" in result:
                 generated_audio.append(f"audio_{i}.mp3")
@@ -336,54 +339,103 @@ def generate_chapter_audio_directly(chapter_num: int) -> str:
     直接生成指定章节的所有音频和字幕，不通过agent调用。
     这是一个便捷函数，可以在需要时直接调用。
     """
-    scripts_dir = f"output/chapters/chapter_{chapter_num}/scripts"
-    audio_dir = f"output/chapters/chapter_{chapter_num}/audio"
-    srt_dir = f"output/chapters/chapter_{chapter_num}/srt"
+    output_dir = f"output/chapters/chapter_{chapter_num}"
+    audio_dir = os.path.join(output_dir, "audio")
+    srt_dir = os.path.join(output_dir, "srt")
+    json_path = os.path.join(output_dir, "scenes_scripts.json")
     
     # 创建输出目录
     os.makedirs(audio_dir, exist_ok=True)
     os.makedirs(srt_dir, exist_ok=True)
     
-    # 获取所有脚本文件
-    script_files = glob.glob(os.path.join(scripts_dir, "script_*.txt"))
-    script_files.sort(key=lambda x: int(os.path.basename(x).split('_')[1].split('.')[0]))
-    
-    if not script_files:
-        return f"❌ 未找到第{chapter_num}章的脚本文件，请先生成分镜脚本"
-    
-    generated_audio = []
-    generated_srt = []
-    failed_items = []
-    
-    print(f"🔊 开始批量生成第{chapter_num}章的{len(script_files)}个音频文件...")
-    
-    for i, script_file in enumerate(script_files, 1):
-        try:
-            # 生成输出路径
+    # 检查是否存在新格式的 JSON 文件
+    if os.path.exists(json_path):
+        with open(json_path, "r", encoding="utf-8") as f:
+            scenes_scripts = json.load(f)
+        
+        if not scenes_scripts:
+            return f"❌ {json_path} 为空"
+        
+        generated_audio = []
+        generated_srt = []
+        failed_items = []
+        
+        print(f"🔊 开始批量生成第{chapter_num}章的{len(scenes_scripts)}个音频文件...")
+        
+        for item in scenes_scripts:
+            i = item.get("scene_index")
+            script_content = item.get("scene_script", "").strip()
+            voice_type = item.get("voice_type", "narrator")  # 获取音色类型，默认为旁白
             audio_path = os.path.join(audio_dir, f"audio_{i}.mp3")
             srt_path = os.path.join(srt_dir, f"srt_{i}.srt")
             
-            print(f"🎵 正在生成第{i}/{len(script_files)}个音频文件...")
-            
-            # 调用音频生成
-            result = generate_audio_for_script(script_file, audio_path, srt_path)
-            
-            if "已生成音频和字幕文件" in result or "音频和字幕生成完成" in result:
-                generated_audio.append(f"audio_{i}.mp3")
-                generated_srt.append(f"srt_{i}.srt")
-                print(f"✅ 第{i}个音频和字幕生成成功")
-            else:
-                failed_items.append(f"audio_{i}.mp3 / srt_{i}.srt")
-                print(f"❌ 第{i}个音频生成失败")
+            try:
+                print(f"🎵 正在生成第{i}/{len(scenes_scripts)}个音频文件（音色：{voice_type}）...")
+                # 直接用内容生成音频和字幕
+                tmp_script_path = os.path.join(output_dir, f"tmp_script_{i}.txt")
+                with open(tmp_script_path, "w", encoding="utf-8") as ftmp:
+                    ftmp.write(script_content)
+                # 传递音色类型参数给 TTS 函数
+                result = generate_audio_for_script(tmp_script_path, audio_path, srt_path, voice_type=voice_type)
+                os.remove(tmp_script_path)
                 
-        except Exception as e:
-            failed_items.append(f"audio_{i}.mp3 / srt_{i}.srt (错误: {str(e)})")
-            print(f"❌ 第{i}个音频生成异常: {str(e)}")
-    
-    # 生成结果报告
-    total_scripts = len(script_files)
-    success_count = len(generated_audio)
-    failed_count = len(failed_items)
+                if "已生成音频和字幕文件" in result or "音频和字幕生成完成" in result:
+                    generated_audio.append(f"audio_{i}.mp3")
+                    generated_srt.append(f"srt_{i}.srt")
+                    print(f"✅ 第{i}个音频和字幕生成成功")
+                else:
+                    failed_items.append(f"audio_{i}.mp3 / srt_{i}.srt")
+                    print(f"❌ 第{i}个音频生成失败")
+                    
+            except Exception as e:
+                failed_items.append(f"audio_{i}.mp3 / srt_{i}.srt (错误: {str(e)})")
+                print(f"❌ 第{i}个音频生成异常: {str(e)}")
+        
+        total_scripts = len(scenes_scripts)
+        success_count = len(generated_audio)
+        failed_count = len(failed_items)
+        
+    else:
+        # 兼容旧的目录结构
+        scripts_dir = f"output/chapters/chapter_{chapter_num}/scripts"
+        script_files = glob.glob(os.path.join(scripts_dir, "script_*.txt"))
+        script_files.sort(key=lambda x: int(os.path.basename(x).split('_')[1].split('.')[0]))
+        
+        if not script_files:
+            return f"❌ 未找到第{chapter_num}章的脚本文件或场景配置，请先生成分镜脚本"
+        
+        generated_audio = []
+        generated_srt = []
+        failed_items = []
+        
+        print(f"🔊 开始批量生成第{chapter_num}章的{len(script_files)}个音频文件（使用旧格式，默认旁白音色）...")
+        
+        for i, script_file in enumerate(script_files, 1):
+            try:
+                # 生成输出路径
+                audio_path = os.path.join(audio_dir, f"audio_{i}.mp3")
+                srt_path = os.path.join(srt_dir, f"srt_{i}.srt")
+                
+                print(f"🎵 正在生成第{i}/{len(script_files)}个音频文件...")
+                
+                # 调用音频生成，使用默认旁白音色
+                result = generate_audio_for_script(script_file, audio_path, srt_path, voice_type="narrator")
+                
+                if "已生成音频和字幕文件" in result or "音频和字幕生成完成" in result:
+                    generated_audio.append(f"audio_{i}.mp3")
+                    generated_srt.append(f"srt_{i}.srt")
+                    print(f"✅ 第{i}个音频和字幕生成成功")
+                else:
+                    failed_items.append(f"audio_{i}.mp3 / srt_{i}.srt")
+                    print(f"❌ 第{i}个音频生成失败")
+                    
+            except Exception as e:
+                failed_items.append(f"audio_{i}.mp3 / srt_{i}.srt (错误: {str(e)})")
+                print(f"❌ 第{i}个音频生成异常: {str(e)}")
+        
+        total_scripts = len(script_files)
+        success_count = len(generated_audio)
+        failed_count = len(failed_items)
     
     result_report = f"""
 📊 第{chapter_num}章音频生成完成报告:
