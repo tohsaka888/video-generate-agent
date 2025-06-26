@@ -13,6 +13,9 @@ import os
 class MainAgentDeps:
     chapter: int = 1  # 只支持单章节生成
     scene_count: int = 5  # 每章节的场景数量，默认5个，范围5-50
+    novel_file_path: str = ""  # 小说源文件路径，用于智能读取
+    chunk_size: int = 500      # 每次读取字符数，可配置
+    overlap_sentences: int = 1  # 重叠句子数，保持上下文连贯
 
 
 main_agent = Agent(
@@ -28,6 +31,8 @@ def orchestrate_video_generation(ctx: RunContext[MainAgentDeps]) -> str:
     主控制器，协调整个AI视频生成流程（单章节）。
     """
     chapter = ctx.deps.chapter
+    novel_file_path = ctx.deps.novel_file_path
+    chunk_size = ctx.deps.chunk_size
     
     system_instruction = f"""
     你是AI视频生成系统的主控制器，负责协调整个视频生成流程。
@@ -35,10 +40,20 @@ def orchestrate_video_generation(ctx: RunContext[MainAgentDeps]) -> str:
     你需要按照以下步骤为第{chapter}章生成完整的AI视频：
 
     1. **文本生成阶段**: 调用 generate_chapter_content 工具生成或加载章节文本内容
+       - 支持智能读取大型小说文件（10MB+），自动分块并保持句子完整性
+       - 如果用户提供了源文件路径：{novel_file_path if novel_file_path else "未提供"}
+       - 读取块大小：{chunk_size}字符
        - 如果检测到用户在 input/chapters/chapter_{chapter}/index.txt 已提供章节内容，则直接使用
-       - 如果用户未提供，则调用AI生成章节内容
+       - 如果用户未提供，则调用AI生成章节内容（支持从源文件智能读取）
     2. **完整媒体生成阶段**: 调用 generate_scene_scripts 工具生成分镜脚本、图片和音频（一站式完成）
     3. **视频合成阶段**: 调用 compose_final_video 工具将所有素材合成最终视频
+
+    **智能读取功能**:
+    - 新增支持从大型小说文件中智能分块读取内容
+    - 自动保持句子完整性，避免截断
+    - 支持上下文重叠，确保内容连贯性
+    - 自动记录读取位置，支持断点续读
+    - 自动检测文件编码，支持多种中文编码
 
     **工作流程**:
     - 只生成第{chapter}章
@@ -49,7 +64,7 @@ def orchestrate_video_generation(ctx: RunContext[MainAgentDeps]) -> str:
     **用户章节内容检测**:
     - 系统会自动检查 input/chapters/chapter_{chapter}/index.txt 是否存在
     - 如果存在，将跳过AI生成，直接使用用户提供的章节内容
-    - 如果不存在，将根据用户的需求生成章节内容
+    - 如果不存在，将根据用户的需求生成章节内容（可配合源文件智能读取）
 
     **注意事项**:
     - 每个步骤都需要等待前一步完全完成
@@ -63,9 +78,10 @@ def orchestrate_video_generation(ctx: RunContext[MainAgentDeps]) -> str:
 
 
 @main_agent.tool
-async def generate_chapter_content(ctx: RunContext[MainAgentDeps], outline: str) -> str:
+async def generate_chapter_content(ctx: RunContext[MainAgentDeps]) -> str:
     """
     生成指定章节的文本内容，如果用户已经提供了章节内容则跳过生成
+    支持从大型小说文件中智能读取内容
     """
     chapter_num = ctx.deps.chapter
     try:
@@ -73,22 +89,28 @@ async def generate_chapter_content(ctx: RunContext[MainAgentDeps], outline: str)
         chapter_dir = f"output/chapters/chapter_{chapter_num}"
         os.makedirs(chapter_dir, exist_ok=True)
         
-        # 检查用户是否已经提供了章节内容
-        output_chapter_path = f"{chapter_dir}/index.txt"
+        if not ctx.deps.novel_file_path:
+            print(f"⚠️ 未提供小说源文件，即将退出")
+            return f"未提供小说源文件，无法生成章节内容。请提供源文件或手动编写章节内容。"
         
-        if os.path.exists(output_chapter_path):
-            print(f"检测到用户已提供第{chapter_num}章内容，跳过AI生成...")
+        # 检查小说源文件是否存在
+        if not os.path.exists(ctx.deps.novel_file_path):
+            print(f"❌ 小说源文件不存在: {ctx.deps.novel_file_path}")
+            return f"小说源文件不存在: {ctx.deps.novel_file_path}"
+            
+        # 调用novel_agent生成章节内容
+        deps = NovelAgentDeps(
+            current_chapter=chapter_num,
+            novel_file_path=ctx.deps.novel_file_path,
+            chunk_size=ctx.deps.chunk_size,
+            overlap_sentences=ctx.deps.overlap_sentences
+        )
+        
+        # 构建包含大纲的提示
+        result = await novel_agent.run(f"请读取小说源文件并生成第{chapter_num}章的内容", deps=deps)
 
-            return f"第{chapter_num}章文本内容已存在: {output_chapter_path}"
-        else:
-            print(f"🚀 用户未提供第{chapter_num}章内容，开始AI生成...")
-            
-            # 调用novel_agent生成章节内容
-            deps = NovelAgentDeps(current_chapter=chapter_num, outline=outline)
-            result = await novel_agent.run("请生成当前章节的内容", deps=deps)
-            
-            print(f"✅ 第{chapter_num}章文本内容AI生成完成")
-            return f"第{chapter_num}章文本内容已AI生成: {result.data}"
+        print(f"✅ 第{chapter_num}章文本内容AI生成完成")
+        return f"第{chapter_num}章文本内容已AI生成: {result.data}"
         
     except Exception as e:
         error_msg = f"❌ 第{chapter_num}章文本处理失败: {str(e)}"
@@ -97,7 +119,7 @@ async def generate_chapter_content(ctx: RunContext[MainAgentDeps], outline: str)
 
 
 @main_agent.tool
-async def generate_scene_scripts(ctx: RunContext[MainAgentDeps], outline: str) -> str:
+async def generate_scene_scripts(ctx: RunContext[MainAgentDeps]) -> str:
     """
     生成指定章节的分镜头脚本、图片和音频（完整流程）
     """
@@ -107,7 +129,6 @@ async def generate_scene_scripts(ctx: RunContext[MainAgentDeps], outline: str) -
         
         # 调用scene_agent生成完整的媒体内容（分镜脚本+图片+音频）
         deps = SceneAgentDeps(
-            outline=outline, 
             current_chapter=chapter_num,
             scene_count=ctx.deps.scene_count
         )
@@ -221,15 +242,24 @@ input/
 
 
 # 便捷的启动函数
-async def start_video_generation(chapter: int = 1, requirement: str = '', scene_count: int = 5) -> str:
+async def start_video_generation(
+    chapter: int = 1, 
+    requirement: str = '', 
+    scene_count: int = 5,
+    novel_file_path: str = "",
+    chunk_size: int = 500,
+    overlap_sentences: int = 1
+) -> str:
     """
     启动AI视频生成流程的便捷函数（单章节）
     
     Args:
-        outline: 小说大纲
         chapter: 章节号
         requirement: 用户需求描述
         scene_count: 每章节的场景数量，范围5-50，默认5
+        novel_file_path: 小说源文件路径，用于智能读取
+        chunk_size: 每次读取字符数，可配置
+        overlap_sentences: 重叠句子数，保持上下文连贯
     
     Returns:
         生成结果描述
@@ -237,10 +267,16 @@ async def start_video_generation(chapter: int = 1, requirement: str = '', scene_
     print("🎯 开始AI视频生成任务")
     print(f"📖 章节号: 第{chapter}章")
     print(f"🎬 每章场景数量: {scene_count}个")
+    if novel_file_path:
+        print(f"📚 小说源文件: {novel_file_path}")
+        print(f"⚙️ 读取块大小: {chunk_size}字符")
     
     deps = MainAgentDeps(
         chapter=chapter,
-        scene_count=scene_count
+        scene_count=scene_count,
+        novel_file_path=novel_file_path,
+        chunk_size=chunk_size,
+        overlap_sentences=overlap_sentences
     )
     
     try:
@@ -263,15 +299,17 @@ if __name__ == "__main__":
     # 示例用法
     import asyncio
     
-    sample_outline = """
-    这是一个关于年轻法师艾莉丝的冒险故事。
-    第一章：艾莉丝在魔法学院接受训练，遇到了好友凯尔。
-    第二章：他们接到任务，前往黑暗森林调查异常现象。
-    第三章：在森林中发现了古老的魔法遗迹和邪恶力量。
-    """
-    
-    # 运行示例
+    # 运行示例 - 基本模式（不使用源文件）
     asyncio.run(start_video_generation(
-        outline=sample_outline,
-        chapter=1
+        chapter=1,
+        requirement="请根据用户提供的大纲生成章节内容"
     ))
+    
+    # 运行示例 - 智能读取模式（使用大型小说源文件）
+    # asyncio.run(start_video_generation(
+    #     chapter=1,
+    #     requirement="基于源文件智能生成章节内容",
+    #     novel_file_path="/path/to/your/novel.txt",
+    #     chunk_size=800,
+    #     overlap_sentences=2
+    # ))

@@ -34,7 +34,6 @@ def validate_scene_count(scene_count: int) -> int:
 
 @dataclass
 class SceneAgentDeps:
-    outline: str
     current_chapter: int = 1
     scene_count: int = 5  # 默认5个场景，可配置范围5-50
     
@@ -53,7 +52,6 @@ def generate_complete_media_content(ctx: RunContext[SceneAgentDeps]) -> str:
     """
     生成完整的媒体内容，包括分镜脚本、图片和音频。
     """
-    outline = ctx.deps.outline
     current_chapter = ctx.deps.current_chapter
     scene_count = ctx.deps.scene_count
 
@@ -113,9 +111,6 @@ beautiful anime girl, solo, (silver hair:1.1), long hair, (blue eyes:1.1), schoo
 
 **重要提示：**
 - 保持角色外貌的一致性，避免同一人物在不同场景中外貌差异过大
-
-故事大纲：
-{outline}
 """
     return system_instruction
 
