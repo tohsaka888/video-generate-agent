@@ -30,7 +30,7 @@ async def main():
     scene_count = 15  # 每章节场景数量（范围：5-50）
     
     # 智能读取配置（可选）
-    novel_file_path = ""  # 设置为你的小说文件路径，例如: "/path/to/your/novel.txt"
+    novel_file_path = "assets/novel/index.txt"  # 设置为你的小说文件路径，例如: "/path/to/your/novel.txt"
     chunk_size = 500      # 每次读取字符数
     overlap_sentences = 1 # 重叠句子数
 
@@ -49,7 +49,7 @@ async def main():
     result = await start_video_generation(
         chapter=chapter,
         scene_count=scene_count,
-        requirement="情节跌宕起伏，要体现出复仇的爽感。",
+        requirement="请帮我生成一个完整的AI视频",
         novel_file_path=novel_file_path,
         chunk_size=chunk_size,
         overlap_sentences=overlap_sentences

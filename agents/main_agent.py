@@ -31,40 +31,16 @@ def orchestrate_video_generation(ctx: RunContext[MainAgentDeps]) -> str:
     主控制器，协调整个AI视频生成流程（单章节）。
     """
     chapter = ctx.deps.chapter
-    novel_file_path = ctx.deps.novel_file_path
-    chunk_size = ctx.deps.chunk_size
     
     system_instruction = f"""
     你是AI视频生成系统的主控制器，负责协调整个视频生成流程。
 
     你需要按照以下步骤为第{chapter}章生成完整的AI视频：
 
-    1. **文本生成阶段**: 调用 generate_chapter_content 工具生成或加载章节文本内容
-       - 支持智能读取大型小说文件（10MB+），自动分块并保持句子完整性
-       - 如果用户提供了源文件路径：{novel_file_path if novel_file_path else "未提供"}
-       - 读取块大小：{chunk_size}字符
-       - 如果检测到用户在 input/chapters/chapter_{chapter}/index.txt 已提供章节内容，则直接使用
-       - 如果用户未提供，则调用AI生成章节内容（支持从源文件智能读取）
-    2. **完整媒体生成阶段**: 调用 generate_scene_scripts 工具生成分镜脚本、图片和音频（一站式完成）
+    1. **文本生成阶段**: 调用 generate_chapter_content
+    2. **完整媒体生成阶段**: 调用 generate_scene_scripts 
     3. **视频合成阶段**: 调用 compose_final_video 工具将所有素材合成最终视频
 
-    **智能读取功能**:
-    - 新增支持从大型小说文件中智能分块读取内容
-    - 自动保持句子完整性，避免截断
-    - 支持上下文重叠，确保内容连贯性
-    - 自动记录读取位置，支持断点续读
-    - 自动检测文件编码，支持多种中文编码
-
-    **工作流程**:
-    - 只生成第{chapter}章
-    - 每个步骤必须严格按照上述3个步骤顺序执行
-    - 确保前一步完成后再执行下一步
-    - 在每个步骤完成后，报告当前进度
-
-    **用户章节内容检测**:
-    - 系统会自动检查 input/chapters/chapter_{chapter}/index.txt 是否存在
-    - 如果存在，将跳过AI生成，直接使用用户提供的章节内容
-    - 如果不存在，将根据用户的需求生成章节内容（可配合源文件智能读取）
 
     **注意事项**:
     - 每个步骤都需要等待前一步完全完成
@@ -90,8 +66,8 @@ async def generate_chapter_content(ctx: RunContext[MainAgentDeps]) -> str:
         os.makedirs(chapter_dir, exist_ok=True)
         
         if not ctx.deps.novel_file_path:
-            print(f"⚠️ 未提供小说源文件，即将退出")
-            return f"未提供小说源文件，无法生成章节内容。请提供源文件或手动编写章节内容。"
+            print("⚠️ 未提供小说源文件，即将退出")
+            return "未提供小说源文件，无法生成章节内容。请提供源文件或手动编写章节内容。"
         
         # 检查小说源文件是否存在
         if not os.path.exists(ctx.deps.novel_file_path):

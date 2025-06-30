@@ -74,8 +74,8 @@ def generate_video(current_chapter: int) -> None:
                 [
                     vfx.FadeIn(1),
                     vfx.FadeOut(1),
-                    vfx.CrossFadeIn(3),
-                    vfx.CrossFadeOut(3),
+                    vfx.CrossFadeIn(1),
+                    vfx.CrossFadeOut(1)
                 ]
             ),
         )
