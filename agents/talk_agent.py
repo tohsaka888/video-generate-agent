@@ -1,22 +1,26 @@
 import os
 import json
 from dataclasses import dataclass
-from typing import List, Dict, Literal
+from typing import List, Literal
 from pydantic_ai import Agent, RunContext
 from utils.llm import chat_model
+from utils.tts import (
+    generate_sentence_audio_and_srt, 
+    merge_audio_files, 
+    merge_srt_files
+)
 
 
 @dataclass
 class TalkAgentDeps:
-    script: str = ""  # 原始脚本内容
-    scene_index: int = 1  # 场景索引
-    chapter: int = 1  # 章节号，默认为1
+    scene_id: int = 1  # 场景ID
 
 
 @dataclass
 class TalkAgentOutput:
-    segment: str = ""
+    text: str = ""
     voice_type: Literal["male", "female", "narrator"] = "narrator"
+
 
 talk_agent = Agent(
     model=chat_model,
@@ -26,133 +30,137 @@ talk_agent = Agent(
 
 
 @talk_agent.instructions
-def process_script_content(ctx: RunContext[TalkAgentDeps]) -> str:
-    """
-    处理脚本内容，切分语句并分配音色类型。
-    """
-    script = ctx.deps.script
-    scene_index = ctx.deps.scene_index
+def analyze_script_and_generate_audio(ctx: RunContext[TalkAgentDeps]) -> str:
+    """分析脚本内容，生成语音和字幕文件"""
+    scene_id = ctx.deps.scene_id
     
-    system_instruction = f"""
-你是一位专业的语音分析师，负责分析小说脚本内容并为每个语句分配合适的音色。
+    return f"""
+你是一位专业的语音分析师，负责为场景 {scene_id} 的脚本生成语音和字幕。
 
-当前任务：
-- 场景索引：{scene_index}
-- 脚本内容：{script}
+工作流程：
+1. 调用 read_scene_script 工具读取场景脚本
+2. 分析脚本内容，将文本按语义拆分成句子
+3. 为每个句子分配合适的音色类型：
+   - **male**: 男性角色对话、男性内心独白
+   - **female**: 女性角色对话、女性内心独白  
+   - **narrator**: 环境描述、叙述文字、无明确性别的内容
+4. 调用 generate_audio_and_srt 工具生成音频和字幕文件
 
-你需要完成以下工作：
+分析规则：
+- 直接对话用引号包围，根据上下文判断说话者性别
+- 内心独白通常以"心想"、"暗自"等词汇开头
+- 环境描述、动作描述使用narrator音色
+- 保持句子完整性，在标点符号处自然断句
+- 每个句子20-50字为宜，过长需要拆分
 
-1. **语句切分**：将脚本内容按照语义和语调自然切分成若干个语句段落
-2. **音色分析**：为每个语句段落分析内容类型并分配合适的音色：
-   - **男声(male)**：男性角色的对话、男性角色的内心独白
-   - **女声(female)**：女性角色的对话、女性角色的内心独白  
-   - **旁白(narrator)**：环境描述、心理描述、故事叙述、无明确性别的对话等
-
-3. **输出格式**：
-```py
-[
-{{
-    "segment": "语句内容",
-    "voice_type": Literal["male", "female", "narrator"] 默认为"narrator"
-}}
-]
-```
-
-**分析规则：**
-- 直接对话（"xxx"）：根据说话者性别选择 male/female
-- 内心独白：根据角色性别选择 male/female
-- 环境描述、动作描述、心理描述：使用 narrator
-- 无明确性别标识的内容：默认使用 narrator
-- 保持语句的完整性，避免在一个完整句子中间切分
-
-**注意事项：**
-- 仔细分析上下文来判断角色性别
-- 确保每个语句都有明确的音色分配
-
-请调用 process_and_update_script 工具来处理并更新脚本。
+请先读取脚本，然后分析并生成音频文件。
 """
-    return system_instruction
 
 
 @talk_agent.tool
-def process_and_update_script(ctx: RunContext[TalkAgentDeps], processed_segments: List[Dict[str, str]]) -> str:
-    """
-    处理脚本段落并更新到 scene_script.json 文件中
+def read_scene_script(ctx: RunContext[TalkAgentDeps]) -> str:
+    """读取指定场景的脚本内容"""
+    scene_id = ctx.deps.scene_id
+    scenes_file = "output/scenes.json"
     
-    Args:
-        processed_segments: 处理后的语句段落列表，格式为 [{"text": "语句内容", "voice_type": "male/female/narrator"}, ...]
-    """
-    scene_index = ctx.deps.scene_index
+    if not os.path.exists(scenes_file):
+        return f"❌ 场景文件不存在: {scenes_file}"
     
-    # 验证输入数据
-    valid_voice_types = {"male", "female", "narrator"}
-    validated_segments = []
-    
-    for segment in processed_segments:
-        if not isinstance(segment, dict) or "text" not in segment or "voice_type" not in segment:
-            continue
-            
-        text = segment["text"].strip()
-        voice_type = segment["voice_type"]
-        
-        if not text:
-            continue
-            
-        if voice_type not in valid_voice_types:
-            print(f"警告：音色类型 '{voice_type}' 无效，已调整为 'narrator'")
-            voice_type = "narrator"
-            
-        validated_segments.append({
-            "text": text,
-            "voice_type": voice_type
-        })
-    
-    if not validated_segments:
-        return f"❌ 场景 {scene_index} 没有有效的语句段落"
-    
-    # 确定 JSON 文件路径
-    chapter = ctx.deps.chapter
-    chapter_dir = f"output/chapters/chapter_{chapter}"
-    json_path = os.path.join(chapter_dir, "scenes_scripts.json")
-    
-    # 读取现有的 JSON 文件
-    scenes_data = []
-    if os.path.exists(json_path):
-        try:
-            with open(json_path, "r", encoding="utf-8") as f:
-                scenes_data = json.load(f)
-        except (json.JSONDecodeError, Exception) as e:
-            print(f"警告：读取 {json_path} 失败: {e}")
-            scenes_data = []
-    
-    # 查找并更新对应场景的数据
-    scene_found = False
-    for scene in scenes_data:
-        if scene.get("scene_index") == scene_index:
-            scene["scene_script"] = validated_segments
-            scene_found = True
-            break
-    
-    if not scene_found:
-        return f"❌ 未找到场景索引 {scene_index} 的数据"
-    
-    # 确保输出目录存在
-    os.makedirs(os.path.dirname(json_path), exist_ok=True)
-    
-    # 写回 JSON 文件
     try:
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(scenes_data, f, ensure_ascii=False, indent=2)
+        with open(scenes_file, "r", encoding="utf-8") as f:
+            scenes_data = json.load(f)
         
-        segment_count = len(validated_segments)
-        voice_stats = {}
-        for seg in validated_segments:
-            voice_type = seg["voice_type"]
-            voice_stats[voice_type] = voice_stats.get(voice_type, 0) + 1
+        # 查找指定场景
+        for scene in scenes_data:
+            if scene.get("scene_id") == scene_id:
+                script = scene.get("script", "")
+                if not script:
+                    return f"❌ 场景 {scene_id} 的脚本内容为空"
+                
+                return f"""场景 {scene_id} 脚本内容：
+
+{script}
+
+字符数: {len(script)}
+
+请分析此脚本，按语义拆分句子并分配音色，然后调用 generate_audio_and_srt 工具生成音频和字幕。"""
         
-        stats_str = ", ".join([f"{voice}: {count}段" for voice, count in voice_stats.items()])
-        
-        return f"✅ 场景 {scene_index} 脚本已更新: {segment_count}个语句段落 ({stats_str})"
+        return f"❌ 未找到场景 {scene_id} 的数据"
         
     except Exception as e:
-        return f"❌ 写入文件失败: {str(e)}"
+        return f"❌ 读取场景文件失败: {str(e)}"
+
+
+@talk_agent.tool
+def generate_audio_and_srt(ctx: RunContext[TalkAgentDeps], segments: List[TalkAgentOutput]) -> str:
+    """为分析后的句子生成音频和字幕文件"""
+    scene_id = ctx.deps.scene_id
+    
+    if not segments:
+        return f"❌ 场景 {scene_id} 没有有效的语句段落"
+    
+    # 验证数据
+    valid_segments = []
+    for seg in segments:
+        if seg.text.strip():
+            valid_segments.append((seg.text.strip(), seg.voice_type))
+    
+    if not valid_segments:
+        return f"❌ 场景 {scene_id} 没有有效的文本内容"
+    
+    try:
+        # 确保输出目录存在
+        audio_dir = "output/audio"
+        srt_dir = "output/srt"
+        os.makedirs(audio_dir, exist_ok=True)
+        os.makedirs(srt_dir, exist_ok=True)
+        
+        # 生成每个句子的音频和字幕
+        audio_files, srt_files = generate_sentence_audio_and_srt(
+            valid_segments, 
+            "output", 
+            scene_id
+        )
+        
+        if not audio_files:
+            return f"❌ 场景 {scene_id} 音频生成失败"
+        
+        # 合并音频文件
+        merged_audio_path = os.path.join(audio_dir, f"scene_{scene_id}.wav")
+        audio_result = merge_audio_files(audio_files, merged_audio_path)
+        
+        # 合并SRT文件
+        merged_srt_path = os.path.join(srt_dir, f"scene_{scene_id}.srt")
+        srt_result = merge_srt_files(srt_files, merged_srt_path)
+        
+        # 清理临时文件
+        for temp_file in audio_files + srt_files:
+            try:
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
+            except Exception:
+                pass
+        
+        # 统计音色使用情况
+        voice_stats = {}
+        for _, voice_type in valid_segments:
+            voice_stats[voice_type] = voice_stats.get(voice_type, 0) + 1
+        
+        stats_str = ", ".join([f"{voice}: {count}句" for voice, count in voice_stats.items()])
+        
+        return f"""✅ 场景 {scene_id} 音频和字幕生成完成:
+
+📊 统计信息:
+- 句子总数: {len(valid_segments)}
+- 音色分布: {stats_str}
+
+📁 输出文件:
+- 音频: {merged_audio_path}
+- 字幕: {merged_srt_path}
+
+🔧 处理结果:
+- {audio_result}
+- {srt_result}"""
+        
+    except Exception as e:
+        return f"❌ 生成音频和字幕失败: {str(e)}"
