@@ -38,6 +38,12 @@ def get_output_tree() -> Dict[str, Any]:
     return build_output_tree(base)
 
 
+# 兼容路径：与前端 Next 原接口名一致
+@app.get("/api/file-tree")
+def get_file_tree() -> Dict[str, Any]:
+    return get_output_tree()
+
+
 app.mount("/agent", main_agent.to_ag_ui(deps=StateDeps(AgentState())))
 
 if __name__ == "__main__":

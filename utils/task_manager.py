@@ -115,10 +115,10 @@ class TaskManager:
             for idx, scene in enumerate(scenes_data):
                 try:
                     # 生成单个场景图片
-                    # generate_image(
-                    #     prompt_text=scene["sd_prompt"],
-                    #     save_path=f"output/images/scene_{idx}.png",
-                    # )
+                    generate_image(
+                        prompt_text=scene["sd_prompt"],
+                        save_path=f"output/images/scene_{idx}.png",
+                    )
                     completed += 1
                     progress = (completed / total_scenes) * 100
                     self.update_task_status(task_id, TaskStatus.RUNNING, progress=progress)

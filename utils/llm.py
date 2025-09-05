@@ -1,6 +1,6 @@
 # 导入OpenAI模型和提供者类
 import httpx
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
 # 导入环境变量相关库
@@ -29,7 +29,7 @@ provider = OpenAIProvider(
 )
 
 # 创建OpenAI模型实例
-chat_model = OpenAIModel(
+chat_model = OpenAIChatModel(
     model_name=CHAT_MODEL,  # 模型名称
     provider=provider,  # 提供者实例
 )

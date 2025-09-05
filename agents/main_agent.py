@@ -36,7 +36,9 @@ def main_instructions(ctx: RunContext[StateDeps[AgentState]]) -> str:
 4. 调用工具批量生成所有场景图片（异步执行）
 5. 调用工具查询图片生成状态，直到完成
 6. 调用工具生成音频和字幕
-7. 调用工具开始视频合成（异步执行），执行成功后提醒用户关注后台生成进度。
+7. 调用工具开始视频合成，执行成功后提醒用户关注后台生成进度。
+
+当视频合成完成后，系统将自动通知用户。你可以结束并给用户汇总执行结果。
 
 {system_prompt}
 """
@@ -192,7 +194,7 @@ async def check_task_status(task_id: str) -> StateSnapshotEvent:
     else:
         message = "⏳ 任务等待中..."
 
-    sleep(15)
+    sleep(25)
 
     return StateSnapshotEvent(
         type=EventType.STATE_SNAPSHOT,

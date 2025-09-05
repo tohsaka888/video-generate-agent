@@ -1,75 +1,23 @@
-import { NextRequest, NextResponse } from "next/server";
-import { exec } from "child_process";
-import { promisify } from "util";
-import path from "path";
+import { NextResponse } from "next/server";
 
-const execAsync = promisify(exec);
+// 将实现迁移到 Python（FastAPI），此处仅做转发以保持前端路径不变。
+// 配置后端地址：设置环境变量 BACKEND_BASE_URL，例如 http://localhost:8000
+const BASE_URL = process.env.BACKEND_BASE_URL || "http://localhost:8000";
 
 export async function GET() {
   try {
-    // 获取项目根目录
-    const projectRoot = process.cwd();
-    const outputDir = path.join(projectRoot, "..", "output");
-    
-    // 使用 Python 脚本获取文件树
-    const command = `cd "${path.dirname(projectRoot)}" && python -c "
-import sys
-sys.path.append('utils')
-from output_tree import build_output_tree
-from pathlib import Path
-import json
-
-output_path = Path('output')
-tree = build_output_tree(output_path)
-print(json.dumps(tree, ensure_ascii=False))
-"`;
-    
-    const { stdout } = await execAsync(command);
-    const tree = JSON.parse(stdout);
-    
-    return NextResponse.json(tree);
-  } catch (error) {
-    console.error("Error getting file tree:", error);
-    
-    // 如果Python脚本失败，返回mock数据
-    const mockTree = {
-      name: "output",
-      type: "directory",
-      path: "",
-      children: [
-        {
-          name: "images",
-          type: "directory",
-          path: "images",
-          children: [
-            {
-              name: "scene_0.png",
-              type: "file",
-              path: "images/scene_0.png",
-              size: 2504102,
-              mtime: "2025-09-02T09:56:28.392320+00:00",
-              ext: ".png",
-            },
-          ],
-        },
-        {
-          name: "audio",
-          type: "directory", 
-          path: "audio",
-          children: [
-            {
-              name: "scene_0.mp3",
-              type: "file",
-              path: "audio/scene_0.mp3",
-              size: 138096,
-              mtime: "2025-09-03T08:25:12.096887+00:00",
-              ext: ".mp3",
-            },
-          ],
-        },
-      ],
-    };
-    
-    return NextResponse.json(mockTree);
+    const res = await fetch(`${BASE_URL}/api/output-tree`, {
+      // 明确禁用缓存，保证得到最新输出目录结构
+      cache: "no-store",
+      // 服务器路由请求无需额外 headers；如需鉴权可在此追加
+    });
+    const data = await res.json();
+    return NextResponse.json(data, { status: res.status });
+  } catch (err: unknown) {
+    console.error("[file-tree] Proxy to Python backend failed:", err);
+    return NextResponse.json(
+      { error: "Failed to fetch file tree from backend" },
+      { status: 502 }
+    );
   }
 }
